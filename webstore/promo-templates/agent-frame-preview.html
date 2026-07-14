@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Browser MCP — Agent Frame Preview</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background:
+        radial-gradient(ellipse at 20% 10%, #e8f5ef 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 90%, #dce8f5 0%, transparent 45%),
+        #f4f6f8;
+      color: #1a2e24;
+    }
+
+    /* Fake page content so the rim is easy to judge */
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 64px 28px 80px;
+    }
+
+    .page h1 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 10px;
+    }
+
+    .page p {
+      font-size: 15px;
+      line-height: 1.6;
+      color: #3d5248;
+      margin-bottom: 16px;
+    }
+
+    .page .card {
+      margin-top: 28px;
+      padding: 20px 22px;
+      background: #fff;
+      border: 1px solid #d8e2dc;
+      border-radius: 12px;
+    }
+
+    .page .card strong { color: #2d6a4f; }
+
+    /* Variant A: 5px gradient rim + inset glow ~24px (matches extension) */
+    #browser-mcp-agent-frame {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      pointer-events: none;
+      user-select: none;
+      box-shadow:
+        inset 0 0 24px 8px rgba(82, 183, 136, 0.35),
+        inset 0 0 48px 16px rgba(45, 106, 79, 0.12);
+    }
+
+    #browser-mcp-agent-frame::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      padding: 5px;
+      background: linear-gradient(
+        135deg,
+        rgba(82, 183, 136, 0.75),
+        rgba(116, 198, 157, 0.35),
+        rgba(45, 106, 79, 0.65),
+        rgba(82, 183, 136, 0.45),
+        rgba(116, 198, 157, 0.7)
+      );
+      background-size: 300% 300%;
+      animation: browser-mcp-frame-shift 8s ease infinite;
+      -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      mask-composite: exclude;
+    }
+
+    @keyframes browser-mcp-frame-shift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    /* HUD controls — do not cover the rim judgment area much */
+    .hud {
+      position: fixed;
+      left: 50%;
+      bottom: 28px;
+      transform: translateX(-50%);
+      z-index: 2147483646;
+      display: flex;
+      gap: 8px;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid #c9d6ce;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(15, 40, 28, 0.12);
+      backdrop-filter: blur(8px);
+    }
+
+    .hud button {
+      border: 0;
+      cursor: pointer;
+      font: 600 12px/1 "Segoe UI", system-ui, sans-serif;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: #edf3ef;
+      color: #1a2e24;
+    }
+
+    .hud button[aria-pressed="true"] {
+      background: #2d6a4f;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div id="browser-mcp-agent-frame" aria-hidden="true"></div>
+
+  <main class="page">
+    <h1>Agent frame preview</h1>
+    <p>
+      Viền gradient quanh viewport — style đề xuất: padding 5px + inset glow ~24px.
+      Mở file này trong Chrome để review. Chuyển variant bên dưới nếu cần so sánh.
+    </p>
+    <div class="card">
+      <p><strong>A (mặc định):</strong> rim 5px + inset shadow 24px / soft 48px</p>
+      <p><strong>B:</strong> rim 6px + inset shadow 24px đậm hơn</p>
+      <p><strong>C:</strong> rim 4px + chỉ glow 24px (mảnh hơn)</p>
+    </div>
+    <p>
+      Nội dung giả lập trang web. Viền không chặn click nhờ
+      <code>pointer-events: none</code>.
+    </p>
+  </main>
+
+  <div class="hud" role="group" aria-label="Variants">
+    <button type="button" data-variant="a" aria-pressed="true">A — 5px + 24px</button>
+    <button type="button" data-variant="b" aria-pressed="false">B — 6px đậm</button>
+    <button type="button" data-variant="c" aria-pressed="false">C — 4px mỏng</button>
+  </div>
+
+  <script>
+    const frame = document.getElementById("browser-mcp-agent-frame");
+    const variants = {
+      a: {
+        padding: "5px",
+        boxShadow:
+          "inset 0 0 24px 8px rgba(82, 183, 136, 0.35), inset 0 0 48px 16px rgba(45, 106, 79, 0.12)",
+      },
+      b: {
+        padding: "6px",
+        boxShadow:
+          "inset 0 0 24px 10px rgba(82, 183, 136, 0.5), inset 0 0 56px 20px rgba(45, 106, 79, 0.18)",
+      },
+      c: {
+        padding: "4px",
+        boxShadow:
+          "inset 0 0 24px 6px rgba(82, 183, 136, 0.28), inset 0 0 40px 12px rgba(45, 106, 79, 0.1)",
+      },
+    };
+
+    document.querySelectorAll(".hud button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const v = variants[btn.dataset.variant];
+        frame.style.boxShadow = v.boxShadow;
+        frame.style.setProperty("--rim-pad", v.padding);
+        document.documentElement.style.setProperty("--rim-pad", v.padding);
+        // Apply padding to ::before via inline style sheet override
+        let override = document.getElementById("variant-override");
+        if (!override) {
+          override = document.createElement("style");
+          override.id = "variant-override";
+          document.head.appendChild(override);
+        }
+        override.textContent = `#browser-mcp-agent-frame::before { padding: ${v.padding}; }`;
+        document.querySelectorAll(".hud button").forEach((b) => {
+          b.setAttribute("aria-pressed", String(b === btn));
+        });
+      });
+    });
+  </script>
+</body>
+</html>

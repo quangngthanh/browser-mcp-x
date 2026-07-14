@@ -95,4 +95,4 @@ Laden Sie die Extension neu: `chrome://extensions/` → Reload-Button bei Browse
 
 ---
 
-Weitere Fragen? https://github.com/Tabtii/browser-mcp/issues
+Weitere Fragen? https://github.com/quangngthanh/browser-mcp-stack/issues

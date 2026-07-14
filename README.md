@@ -139,6 +139,6 @@ MIT — Open Source
 
 ## Links
 
-- **GitHub:** https://github.com/Tabtii/browser-mcp
+- **GitHub:** https://github.com/quangngthanh/browser-mcp-stack
 - **MCP Protocol:** https://modelcontextprotocol.io
-- **Report Issues:** https://github.com/Tabtii/browser-mcp/issues
+- **Report Issues:** https://github.com/quangngthanh/browser-mcp-stack/issues

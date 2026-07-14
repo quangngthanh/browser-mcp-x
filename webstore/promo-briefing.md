@@ -6,7 +6,7 @@ Fünf finale PNGs für den Chrome-Web-Store-Upload der BrowserMCP-Extension (Ver
 ## Branding
 - **Name:** BrowserMCP — AI Browser Control via MCP
 - **Slogan/Tagline:** “Give AI agents control over your browser. Zero setup. 100% local.”
-- **Primary URL:** https://github.com/Tabtii/browser-mcp
+- **Primary URL:** https://github.com/quangngthanh/browser-mcp-stack
 
 ## Farbpalette (muss exakt verwendet werden)
 
@@ -68,7 +68,7 @@ Fünf finale PNGs für den Chrome-Web-Store-Upload der BrowserMCP-Extension (Ver
   - ⚡ Zero npm — Python 3 only
   - 🌐 Your session — Logged-in tabs
 - **Bottom:** Reihe von Tool-Chips (`navigate`, `screenshot`, `click`, `type_text`, `get_dom`, `evaluate`, `get_tabs`, `fill_form` etc.) in Sage-Green / Fresh-Green
-- **Footer:** “BrowserMCP v0.4.0 · MIT License · github.com/Tabtii/browser-mcp” in `#6B7B72`, 12–13 px
+- **Footer:** “BrowserMCP v0.4.0 · MIT License · github.com/quangngthanh/browser-mcp-stack” in `#6B7B72`, 12–13 px
 
 ## 3. Small Promo Tile — 440 × 280 px
 **Format:** PNG

@@ -3,7 +3,7 @@
 > **Erstellt:** 03. Juli 2026  
 > **Version:** BrowserMCP v0.2.0 (24 MCP Tools)  
 > **Architektur:** Chrome Extension (MV3) + relay.py (Python, zero deps) + WebSocket  
-> **GitHub:** https://github.com/Tabtii/browser-mcp (privat)
+> **GitHub:** https://github.com/quangngthanh/browser-mcp-stack (privat)
 
 ---
 

@@ -15,8 +15,8 @@ selling one-time-purchase software with proper license enforcement.
 1. Go to https://www.lemonsqueezy.com and click **Sign up**.
 2. Verify your email (you'll get a confirmation link).
 3. After login, LemonSqueezy prompts you to create a store:
-   - **Store name:** `Tabtii`
-   - **URL:** `https://tabtii.lemonsqueezy.com` (the `tabtii` slug is taken
+   - **Store name:** `quangngthanh`
+   - **URL:** `https://quangngthanh.lemonsqueezy.com` (the `quangngthanh` slug is taken
      only if someone else grabbed it; otherwise pick the closest available)
 4. Complete the payout setup (bank account or PayPal). This is required before
    you can charge real money. LemonSqueezy holds the funds until you reach
@@ -66,10 +66,10 @@ From now on, every successful purchase automatically:
 ## 4. Get the checkout URL (10 sec)
 
 1. In the product detail page, click **Share** → copy the **Direct checkout
-   link** (looks like `https://tabtii.lemonsqueezy.com/buy/<product-id>`).
+   link** (looks like `https://quangngthanh.lemonsqueezy.com/buy/<product-id>`).
 2. Open `docs/index.html`, find line ~599:
    ```html
-   <a class="btn btn-amber" href="https://tabtii.lemonsqueezy.com/buy/..." ...>
+   <a class="btn btn-amber" href="https://quangngthanh.lemonsqueezy.com/buy/..." ...>
    ```
 3. Replace `...` with your actual product ID and commit.
 

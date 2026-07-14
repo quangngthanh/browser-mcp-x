@@ -31,4 +31,4 @@ If you purchase BrowserMCP Pro:
 
 ## Open source
 
-BrowserMCP is open source (MIT). You can audit all code at [github.com/Tabtii/browser-mcp](https://github.com/Tabtii/browser-mcp).
+BrowserMCP is open source (MIT). You can audit all code at [github.com/quangngthanh/browser-mcp-stack](https://github.com/quangngthanh/browser-mcp-stack).

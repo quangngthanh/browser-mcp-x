@@ -8,8 +8,8 @@
 | Entpackte Extension | `/tmp/browsermcp-v0.4.0-unpacked/` |
 | Permission-Begründungen | `/home/torben/projects/browser-mcp/webstore/permissions-justification.md` |
 | Promo-Tile Briefing | `/home/torben/projects/browser-mcp/webstore/promo-tile-brief.md` |
-| Datenschutzerklärung (live) | `https://tabtii.github.io/browser-mcp/privacy.html` |
-| Checkout (Pro) | `https://tabtii.lemonsqueezy.com/checkout/buy/ee56313d-60e1-4181-9b5b-48a9183f469c` |
+| Datenschutzerklärung (live) | `https://quangngthanh.github.io/browser-mcp-stack/privacy.html` |
+| Checkout (Pro) | `https://quangngthanh.lemonsqueezy.com/checkout/buy/ee56313d-60e1-4181-9b5b-48a9183f469c` |
 
 ## Schritt-für-Schritt Upload
 
@@ -35,9 +35,9 @@
   ```
 - **Category:** Developer Tools
 - **Language:** English (Primary)
-- **Website:** `https://github.com/Tabtii/browser-mcp`
-- **Support URL:** `https://github.com/Tabtii/browser-mcp/issues`
-- **Privacy Policy URL:** `https://tabtii.github.io/browser-mcp/privacy.html`
+- **Website:** `https://github.com/quangngthanh/browser-mcp-stack`
+- **Support URL:** `https://github.com/quangngthanh/browser-mcp-stack/issues`
+- **Privacy Policy URL:** `https://quangngthanh.github.io/browser-mcp-stack/privacy.html`
 - **Contact email:** `torbi95@gmail.com`
 
 ### Grafiken (hochladen)
@@ -67,7 +67,7 @@ Bei jedem Berechtigungshinweis den passenden Text aus `webstore/permissions-just
 - **Single Purpose:** „This extension exposes the user's browser as an MCP server so AI agents can perform authorized web automation tasks. The sole purpose is browser control via MCP."
 - **Remote Code:** No
 - **Data Usage:** See `permissions-justification.md` → Datenweitergabe-Abschnitt
-- **Privacy Policy URL:** `https://tabtii.github.io/browser-mcp/privacy.html`
+- **Privacy Policy URL:** `https://quangngthanh.github.io/browser-mcp-stack/privacy.html`
 
 ## Nach dem Upload
 

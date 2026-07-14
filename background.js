@@ -218,6 +218,7 @@ const MCP_TOOLS = [
 // User switching tabs will not affect the agent's target tab.
 // Resets when the agent disconnects. Use switch_tab to change the target.
 let agentTargetTabId = null;
+let activeManipulatedTabIds = new Set();
 
 async function getAgentTab() {
   if (agentTargetTabId !== null) {
@@ -292,6 +293,10 @@ async function executeTool(toolName, args) {
   const tab = await getAgentTab();
   if (!tab && !["get_tabs", "switch_tab", "close_tab"].includes(toolName)) {
     throw new Error("No active tab found");
+  }
+
+  if (tab && tab.id) {
+    await showAgentFrame(tab.id);
   }
 
   switch (toolName) {
@@ -1421,7 +1426,9 @@ async function stopServer() {
 
   isRunning = false;
   connectedAgent = null;
+  wsClients.clear();
   chrome.storage.local.set({ mcpRunning: false, mcpPort: null, agentConnected: false });
+  clearAllAgentFrames();
 }
 
 // ─── Message routing: offscreen ↔ background ───
@@ -1455,6 +1462,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       chrome.storage.local.set({ agentConnected: false });
       chrome.action.setBadgeText({ text: isRunning ? "RDY" : "" });
     }
+    clearAllAgentFrames();
     sendResponse({ ok: true });
     return false;
   }
@@ -1509,4 +1517,127 @@ chrome.runtime.onStartup.addListener(async () => {
 chrome.runtime.onSuspend.addListener(() => {
   // Do not stop the offscreen document here. It owns the persistent WebSocket.
   console.log("[BrowserMCP] Service worker suspended; offscreen stays active.");
+});
+
+// ─── Agent frame: soft gradient rim on tabs the agent has touched ───
+async function showAgentFrame(tabId) {
+  if (!tabId) return;
+  activeManipulatedTabIds.add(tabId);
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.url || !tab.url.startsWith("http")) return;
+
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: injectAgentFrame
+    }).catch(() => {});
+  } catch (e) {}
+}
+
+async function updateAgentFrame(tabId) {
+  if (!tabId) return;
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.url || !tab.url.startsWith("http")) return;
+
+    if (activeManipulatedTabIds.has(tabId)) {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: injectAgentFrame
+      }).catch(() => {});
+    } else {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: removeAgentFrame
+      }).catch(() => {});
+    }
+  } catch (e) {
+    // Ignore restricted/system tabs
+  }
+}
+
+function injectAgentFrame() {
+  if (document.getElementById("browser-mcp-agent-frame")) return;
+
+  const style = document.createElement("style");
+  style.id = "browser-mcp-agent-frame-styles";
+  style.textContent = `
+    #browser-mcp-agent-frame {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      pointer-events: none;
+      user-select: none;
+      box-shadow:
+        inset 0 0 24px 8px rgba(82, 183, 136, 0.35),
+        inset 0 0 48px 16px rgba(45, 106, 79, 0.12);
+    }
+    #browser-mcp-agent-frame::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      padding: 5px;
+      background: linear-gradient(
+        135deg,
+        rgba(82, 183, 136, 0.75),
+        rgba(116, 198, 157, 0.35),
+        rgba(45, 106, 79, 0.65),
+        rgba(82, 183, 136, 0.45),
+        rgba(116, 198, 157, 0.7)
+      );
+      background-size: 300% 300%;
+      animation: browser-mcp-frame-shift 8s ease infinite;
+      -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      mask-composite: exclude;
+    }
+    @keyframes browser-mcp-frame-shift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+  `;
+
+  const frame = document.createElement("div");
+  frame.id = "browser-mcp-agent-frame";
+  frame.setAttribute("aria-hidden", "true");
+
+  document.documentElement.appendChild(style);
+  document.documentElement.appendChild(frame);
+}
+
+function removeAgentFrame() {
+  document.getElementById("browser-mcp-agent-frame")?.remove();
+  document.getElementById("browser-mcp-agent-frame-styles")?.remove();
+  // Clean up legacy badge if an older inject is still on the page
+  document.getElementById("browser-mcp-active-badge")?.remove();
+  document.getElementById("browser-mcp-badge-styles")?.remove();
+}
+
+async function clearAllAgentFrames() {
+  const activeIds = Array.from(activeManipulatedTabIds);
+  activeManipulatedTabIds.clear();
+  for (const tabId of activeIds) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: removeAgentFrame
+      }).catch(() => {});
+    } catch (e) {}
+  }
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === "complete") {
+    updateAgentFrame(tabId);
+  }
+});
+
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  updateAgentFrame(activeInfo.tabId);
 });

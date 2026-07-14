@@ -56,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Chrome MV3 extension** — Service worker + popup + offscreen for screenshot
 - **Zero dependencies** — Python stdlib only, no npm required
 
-[0.4.0]: https://github.com/Tabtii/browser-mcp/releases/tag/v0.4.0
-[0.3.0]: https://github.com/Tabtii/browser-mcp/releases/tag/v0.3.0
-[0.2.0]: https://github.com/Tabtii/browser-mcp/releases/tag/v0.2.0
-[0.1.0]: https://github.com/Tabtii/browser-mcp/releases/tag/v0.1.0
+[0.4.0]: https://github.com/quangngthanh/browser-mcp-stack/releases/tag/v0.4.0
+[0.3.0]: https://github.com/quangngthanh/browser-mcp-stack/releases/tag/v0.3.0
+[0.2.0]: https://github.com/quangngthanh/browser-mcp-stack/releases/tag/v0.2.0
+[0.1.0]: https://github.com/quangngthanh/browser-mcp-stack/releases/tag/v0.1.0

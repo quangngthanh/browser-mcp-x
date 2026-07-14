@@ -55,8 +55,8 @@ BrowserMCP verwendet **keine Drittanbieter-Dienste**. Es werden keine SDKs für 
 
 ## Open Source
 
-BrowserMCP ist Open Source (MIT-Lizenz). Der vollständige Quellcode ist unter https://github.com/Tabtii/browser-mcp einsehbar. Sie können jeden Aspekt der Datenverarbeitung selbst überprüfen.
+BrowserMCP ist Open Source (MIT-Lizenz). Der vollständige Quellcode ist unter https://github.com/quangngthanh/browser-mcp-stack einsehbar. Sie können jeden Aspekt der Datenverarbeitung selbst überprüfen.
 
 ## Kontakt
 
-Bei Fragen zum Datenschutz: https://github.com/Tabtii/browser-mcp/issues
+Bei Fragen zum Datenschutz: https://github.com/quangngthanh/browser-mcp-stack/issues

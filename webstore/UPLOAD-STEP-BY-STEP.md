@@ -58,9 +58,9 @@ zip -r /tmp/browsermcp-v0.4.0.zip .
 ### URLs
 | Feld | Inhalt |
 |---|---|
-| **Privacy policy** | `https://raw.githubusercontent.com/Tabtii/browser-mcp/master/privacy.html` (oder auf eigenen Webspace hosten) |
+| **Privacy policy** | `https://raw.githubusercontent.com/quangngthanh/browser-mcp/master/privacy.html` (oder auf eigenen Webspace hosten) |
 | **Support / Contact email** | `torbi95@gmail.com` |
-| **Website** | `https://github.com/Tabtii/browser-mcp` |
+| **Website** | `https://github.com/quangngthanh/browser-mcp-stack` |
 
 ## Schritt 5 — Grafiken hochladen
 

@@ -12,7 +12,7 @@ Thanks for your interest in BrowserMCP! This is a small project, but contributio
 
 ```bash
 # Clone
-git clone https://github.com/Tabtii/browser-mcp.git
+git clone https://github.com/quangngthanh/browser-mcp-stack.git
 cd browser-mcp
 
 # Load extension in Chrome
