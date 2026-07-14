@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BrowserMCP — AI Browser Control</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 360px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0F1512;
+    color: #E2E9E5;
+  }
+  .header {
+    background: linear-gradient(135deg, #2D6A4F 0%, #52B788 100%);
+    padding: 20px;
+    text-align: center;
+  }
+  .header h1 {
+    font-size: 20px;
+    font-weight: 900;
+    color: white;
+  }
+  .header p {
+    font-size: 12px;
+    color: rgba(255,255,255,0.8);
+    margin-top: 4px;
+  }
+  .status-card {
+    margin: 16px;
+    background: #1A221E;
+    border-radius: 16px;
+    padding: 20px;
+  }
+  .status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .status-label {
+    font-size: 13px;
+    color: #8A9B91;
+  }
+  .status-value {
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+  }
+  .dot-on { background: #52B788; }
+  .dot-off { background: #6B7B72; }
+  .dot-waiting { background: #E8A33D; }
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  .btn-primary {
+    background: #2D6A4F;
+    color: white;
+  }
+  .btn-danger {
+    background: #E55934;
+    color: white;
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .config-section {
+    margin: 16px;
+    background: #1A221E;
+    border-radius: 16px;
+    padding: 16px;
+  }
+  .config-label {
+    font-size: 12px;
+    color: #8A9B91;
+    margin-bottom: 4px;
+  }
+  .config-value {
+    font-size: 13px;
+    color: #E2E9E5;
+    font-family: 'Courier New', monospace;
+    background: #0F1512;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .config-value:hover {
+    background: #2A3A32;
+  }
+  .config-value::after {
+    content: " 📋";
+    opacity: 0.5;
+    font-size: 12px;
+  }
+  .tool-list {
+    margin: 16px;
+    background: #1A221E;
+    border-radius: 16px;
+    padding: 16px;
+  }
+  .tool-list h3 {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .tool-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .tool-chip {
+    font-size: 11px;
+    padding: 4px 10px;
+    background: #2A3A32;
+    border-radius: 8px;
+    color: #52B788;
+  }
+  .footer {
+    text-align: center;
+    padding: 12px;
+    font-size: 11px;
+    color: #6B7B72;
+  }
+  .btn-secondary {
+    background: #2A3A32;
+    color: #E2E9E5;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🌐 BrowserMCP</h1>
+  <p>AI Browser Control via MCP</p>
+</div>
+
+<div class="status-card">
+  <div class="status-row">
+    <span class="status-label">Server Status</span>
+    <span class="status-value">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">Gestoppt</span>
+    </span>
+  </div>
+  <div class="status-row">
+    <span class="status-label">WebSocket</span>
+    <span class="status-value" id="wsStatus">—</span>
+  </div>
+  <div class="status-row">
+    <span class="status-label">AI Agent</span>
+    <span class="status-value" id="agentStatus">Nicht verbunden</span>
+  </div>
+
+  <button class="btn btn-primary" id="startBtn">
+    Start
+  </button>
+</div>
+
+<div class="config-section">
+  <div class="config-label">MCP Client Konfiguration (Cursor / Claude)</div>
+  <div class="config-value" id="configText">
+    python3 relay.py
+  </div>
+  <div class="config-label">JSON Config (für Cursor / Claude)</div>
+  <div class="config-value" id="jsonConfig">
+{ "mcpServers": { "browser-mcp": { "command": "python3", "args": ["relay.py"] } } }
+  </div>
+</div>
+
+<div class="tool-list">
+  <h3>🛠️ Tools</h3>
+  <div class="tool-grid">
+    <span class="tool-chip">navigate</span>
+    <span class="tool-chip">screenshot</span>
+    <span class="tool-chip">get_dom</span>
+    <span class="tool-chip">click</span>
+    <span class="tool-chip">type_text</span>
+    <span class="tool-chip">extract_text</span>
+    <span class="tool-chip">scroll</span>
+    <span class="tool-chip">get_tabs</span>
+    <span class="tool-chip">switch_tab</span>
+    <span class="tool-chip">close_tab</span>
+    <span class="tool-chip">evaluate</span>
+    <span class="tool-chip">get_page_info</span>
+    <span class="tool-chip">fill_form</span>
+    <span class="tool-chip">wait</span>
+    <span class="tool-chip">press_key</span>
+    <span class="tool-chip">get_links</span>
+    <span class="tool-chip">start_recording</span>
+    <span class="tool-chip">stop_recording</span>
+    <span class="tool-chip">playback</span>
+    <span class="tool-chip">detect_forms</span>
+    <span class="tool-chip">auto_fill_form</span>
+    <span class="tool-chip">create_tab</span>
+    <span class="tool-chip">batch_execute</span>
+    <span class="tool-chip">get_console_logs</span>
+    <span class="tool-chip">get_network_requests</span>
+    <span class="tool-chip">highlight</span>
+    <span class="tool-chip">wait_for_element</span>
+    <span class="tool-chip">get_interactive_elements</span>
+    <span class="tool-chip">click_by_id</span>
+    <span class="tool-chip">type_by_id</span>
+    <span class="tool-chip">click_text</span>
+    <span class="tool-chip">hover</span>
+    <span class="tool-chip">drag_and_drop</span>
+    <span class="tool-chip">handle_dialog</span>
+    <span class="tool-chip">get_markdown</span>
+    <span class="tool-chip">snapshot</span>
+    <span class="tool-chip">select_option</span>
+  </div>
+</div>
+
+<div class="footer">
+  BrowserMCP · Zero-setup · No npm
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

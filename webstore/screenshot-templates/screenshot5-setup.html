@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>BrowserMCP — Screenshot Template 5: Setup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1280px;
+    height: 800px;
+    background: #0F1512;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    color: #E2E9E5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+  }
+  .header { text-align: center; margin-bottom: 40px; }
+  .header h1 { font-size: 32px; font-weight: 900; }
+  .header h1 .accent { color: #52B788; }
+  .header p { font-size: 14px; color: #8A9B91; margin-top: 4px; }
+  .steps {
+    display: flex;
+    gap: 24px;
+    max-width: 1100px;
+  }
+  .step {
+    flex: 1;
+    background: #1A221E;
+    border: 2px solid #2A3A32;
+    border-radius: 16px;
+    padding: 28px;
+    position: relative;
+  }
+  .step .num {
+    position: absolute;
+    top: -16px;
+    left: 24px;
+    background: linear-gradient(135deg, #2D6A4F, #52B788);
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 900;
+  }
+  .step h3 { font-size: 16px; font-weight: 700; color: #52B788; margin-bottom: 12px; }
+  .step p { font-size: 13px; color: #8A9B91; margin-bottom: 12px; line-height: 1.6; }
+  .code-block {
+    background: #0F1512;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    color: #52B788;
+    border: 1px solid #2A3A32;
+    overflow-x: auto;
+  }
+  .code-block .comment { color: #6B7B72; }
+  .vs-box {
+    margin-top: 40px;
+    background: #1A221E;
+    border-radius: 16px;
+    padding: 24px 40px;
+    display: flex;
+    gap: 48px;
+    align-items: center;
+  }
+  .vs-col { text-align: center; }
+  .vs-col h4 { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+  .vs-col .items { font-size: 12px; color: #8A9B91; line-height: 1.8; }
+  .vs-col.us h4 { color: #52B788; }
+  .vs-col.them h4 { color: #E55934; }
+  .vs-arrow { font-size: 28px; color: #8A9B91; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>Setup in <span class="accent">3 Schritten</span></h1>
+    <p>Kein npm. Kein Node.js. Kein pip. Nur Python 3.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="num">1</div>
+      <h3>🧩 Extension laden</h3>
+      <p>chrome://extensions/ öffnen, Entwicklermodus aktivieren, Ordner laden.</p>
+      <div class="code-block"><span class="comment"># chrome://extensions/</span><br>→ Entwicklermodus: ON<br>→ Entpackt laden: browser-mcp/</div>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <h3>🐍 Relay starten</h3>
+      <p>Terminal öffnen, relay.py ausführen. Fertig.</p>
+      <div class="code-block"><span class="comment"># Terminal</span><br>python3 relay.py<br><span class="comment"># → ws://localhost:9274</span></div>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <h3>🤖 AI-Agent verbinden</h3>
+      <p>MCP-Config kopieren, in Cursor/Claude einfügen, Extension starten.</p>
+      <div class="code-block">{ "mcpServers": {<br>  "browser-mcp": {<br>    "command": "python3",<br>    "args": ["relay.py"]<br>  }<br>}}</div>
+    </div>
+  </div>
+  <div class="vs-box">
+    <div class="vs-col us">
+      <h4>✅ BrowserMCP</h4>
+      <div class="items">
+        python3 relay.py<br>
+        ~60KB total<br>
+        Keine Dependencies
+      </div>
+    </div>
+    <div class="vs-arrow">VS</div>
+    <div class="vs-col them">
+      <h4>❌ Andere Lösungen</h4>
+      <div class="items">
+        npm install -g ...<br>
+        300MB+ Browser-Binary<br>
+        Node.js + npm + pip
+      </div>
+    </div>
+  </div>
+</body>
+</html>

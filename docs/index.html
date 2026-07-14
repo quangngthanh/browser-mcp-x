@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BrowserMCP — AI Browser Control via MCP</title>
+  <meta name="description" content="Turn Chrome into an MCP server. 35 tools. Zero dependencies. AI browser control for Claude, Cursor & any MCP client.">
+  <meta property="og:title" content="BrowserMCP — AI Browser Control via MCP">
+  <meta property="og:description" content="Turn Chrome into an MCP server. 35 tools. Zero dependencies.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://tabtii.github.io/browser-mcp/">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0F1512;
+      --bg-card: #1A221E;
+      --bg-hover: #2A3A32;
+      --green: #52B788;
+      --green-dark: #2D6A4F;
+      --amber: #E8A33D;
+      --red: #E55934;
+      --text: #E2E9E5;
+      --text-dim: #8A9B91;
+      --text-muted: #6B7B72;
+      --border: #2A3A32;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    a { color: var(--green); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ─── Hero ─── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 20px;
+      background: radial-gradient(ellipse at 50% 0%, rgba(45, 106, 79, 0.15) 0%, transparent 70%);
+    }
+    .hero-badges {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .badge {
+      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+    .badge-green { border-color: var(--green); color: var(--green); }
+    .hero h1 {
+      font-size: clamp(2rem, 6vw, 4rem);
+      font-weight: 900;
+      line-height: 1.1;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, var(--green) 0%, #74C69D 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p {
+      font-size: clamp(1rem, 2.5vw, 1.3rem);
+      color: var(--text-dim);
+      max-width: 600px;
+      margin-bottom: 32px;
+    }
+    .hero-cta {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      text-decoration: none;
+    }
+    .btn:hover { transform: translateY(-2px); text-decoration: none; }
+    .btn-primary {
+      background: var(--green-dark);
+      color: white;
+      box-shadow: 0 4px 20px rgba(45, 106, 79, 0.3);
+    }
+    .btn-primary:hover { box-shadow: 0 6px 30px rgba(45, 106, 79, 0.5); }
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-amber {
+      background: var(--amber);
+      color: #0F1512;
+    }
+
+    /* ─── Stats ─── */
+    .stats {
+      display: flex;
+      gap: 40px;
+      margin-top: 48px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .stat {
+      text-align: center;
+    }
+    .stat-num {
+      font-size: 2rem;
+      font-weight: 900;
+      color: var(--green);
+    }
+    .stat-label {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* ─── Sections ─── */
+    .section {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 80px 20px;
+    }
+    .section h2 {
+      font-size: clamp(1.5rem, 4vw, 2.5rem);
+      font-weight: 900;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .section-subtitle {
+      text-align: center;
+      color: var(--text-dim);
+      margin-bottom: 48px;
+      font-size: 1.1rem;
+    }
+
+    /* ─── Comparison Table ─── */
+    .comparison {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0 auto;
+      max-width: 700px;
+    }
+    .comparison th, .comparison td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .comparison th {
+      font-size: 14px;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+    .comparison td {
+      font-size: 14px;
+    }
+    .comparison .col-us {
+      color: var(--green);
+      font-weight: 700;
+    }
+    .check { color: var(--green); }
+    .cross { color: var(--red); }
+
+    /* ─── Tools Grid ─── */
+    .tools-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .tool-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      transition: border-color 0.2s;
+    }
+    .tool-card:hover { border-color: var(--green); }
+    .tool-card h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .tool-card p {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+    .tool-card.pro {
+      border-color: var(--amber);
+    }
+    .tool-card.pro h3::after {
+      content: " PRO";
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--amber);
+      color: #0F1512;
+      vertical-align: middle;
+      margin-left: 6px;
+    }
+
+    /* ─── Pricing ─── */
+    .pricing {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    .price-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      text-align: center;
+      position: relative;
+    }
+    .price-card.featured {
+      border-color: var(--green);
+      box-shadow: 0 0 40px rgba(82, 183, 136, 0.1);
+    }
+    .price-card .price-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+    .price-card .price-amount {
+      font-size: 3rem;
+      font-weight: 900;
+      margin-bottom: 4px;
+    }
+    .price-card .price-period {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+    .price-card ul {
+      list-style: none;
+      text-align: left;
+      margin-bottom: 24px;
+    }
+    .price-card li {
+      padding: 8px 0;
+      font-size: 14px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .price-card li::before {
+      content: "✓";
+      color: var(--green);
+      font-weight: 700;
+    }
+    .price-card li.no::before {
+      content: "✗";
+      color: var(--text-muted);
+    }
+    .price-card li.no { color: var(--text-muted); }
+    .price-card .btn {
+      width: 100%;
+      justify-content: center;
+    }
+
+    /* ─── Quick Start ─── */
+    .quickstart {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    .quickstart h3 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+    .quickstart ol {
+      padding-left: 20px;
+    }
+    .quickstart li {
+      padding: 8px 0;
+      color: var(--text-dim);
+    }
+    .quickstart code {
+      background: var(--bg);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      color: var(--green);
+      font-size: 13px;
+    }
+    .quickstart pre {
+      background: var(--bg);
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+    .quickstart pre code {
+      background: none;
+      padding: 0;
+      color: var(--text);
+    }
+
+    /* ─── License Activation ─── */
+    .license-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 500px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .license-input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 16px;
+      font-family: 'Courier New', monospace;
+      text-align: center;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      box-sizing: border-box;
+    }
+    .license-input:focus {
+      outline: none;
+      border-color: var(--green);
+    }
+    .license-note {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    /* ─── Footer ─── */
+    .footer {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+      font-size: 13px;
+      border-top: 1px solid var(--border);
+    }
+    .footer a { color: var(--text-dim); }
+    .footer-links {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 600px) {
+      .stats { gap: 20px; }
+      .stat-num { font-size: 1.5rem; }
+      .section { padding: 60px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ Hero ═══ -->
+<section class="hero">
+  <div class="hero-badges">
+    <span class="badge badge-green">✓ Zero Dependencies</span>
+    <span class="badge">Chrome MV3</span>
+    <span class="badge">MCP Protocol</span>
+    <span class="badge">MIT License</span>
+  </div>
+  <h1>BrowserMCP</h1>
+  <p>Turn Chrome into an MCP server. Let AI agents control your browser. 35 tools. No npm. No dependencies.</p>
+  <div class="hero-cta">
+    <a class="btn btn-primary" href="https://github.com/Tabtii/browser-mcp">⭐ Star on GitHub</a>
+    <a class="btn btn-secondary" href="#install">Install</a>
+    <a class="btn btn-amber" href="#pro">Get Pro — $9</a>
+  </div>
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-num">35</div>
+      <div class="stat-label">MCP Tools</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">~26KB</div>
+      <div class="stat-label">Extension Size</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">0</div>
+      <div class="stat-label">Dependencies</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">100%</div>
+      <div class="stat-label">Local</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Comparison ═══ -->
+<section class="section" id="comparison">
+  <h2>Why BrowserMCP?</h2>
+  <p class="section-subtitle">The simplest way to give AI agents browser control.</p>
+  <table class="comparison">
+    <thead>
+      <tr>
+        <th></th>
+        <th>BrowserMCP</th>
+        <th>mcp-chrome</th>
+        <th>Playwright MCP</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Setup</td>
+        <td class="col-us">1 click + python3</td>
+        <td>npm install + extension</td>
+        <td>npm + browser download</td>
+      </tr>
+      <tr>
+        <td>Dependencies</td>
+        <td class="col-us">Python 3 (pre-installed)</td>
+        <td>Node.js + npm</td>
+        <td>Node.js + Playwright + 300MB browser</td>
+      </tr>
+      <tr>
+        <td>Your real session</td>
+        <td class="col-us"><span class="check">✓</span></td>
+        <td><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+      </tr>
+      <tr>
+        <td>Tools</td>
+        <td class="col-us">35</td>
+        <td>20+</td>
+        <td>~10</td>
+      </tr>
+      <tr>
+        <td>Recording / Playback</td>
+        <td class="col-us"><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+      </tr>
+      <tr>
+        <td>Batch Execute</td>
+        <td class="col-us"><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+      </tr>
+      <tr>
+        <td>Network Capture</td>
+        <td class="col-us"><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+      </tr>
+      <tr>
+        <td>Markdown Export</td>
+        <td class="col-us"><span class="check">✓</span></td>
+        <td><span class="cross">✗</span></td>
+        <td><span class="cross">✗</span></td>
+      </tr>
+      <tr>
+        <td>Telemetry</td>
+        <td class="col-us"><span class="check">None</span></td>
+        <td>None</td>
+        <td>None</td>
+      </tr>
+      <tr>
+        <td>Size</td>
+        <td class="col-us">~26KB</td>
+        <td>~500KB</td>
+        <td>300MB+</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══ Tools ═══ -->
+<section class="section" id="tools">
+  <h2>35 MCP Tools</h2>
+  <p class="section-subtitle">Everything an AI agent needs to control a browser.</p>
+  <div class="tools-grid">
+    <div class="tool-card"><h3>navigate</h3><p>Navigate to a URL</p></div>
+    <div class="tool-card"><h3>screenshot</h3><p>Capture visible tab</p></div>
+    <div class="tool-card"><h3>get_dom</h3><p>Extract accessibility tree</p></div>
+    <div class="tool-card"><h3>click</h3><p>Click element by CSS selector</p></div>
+    <div class="tool-card"><h3>type_text</h3><p>Type text into a field</p></div>
+    <div class="tool-card"><h3>extract_text</h3><p>Get text from page/selector</p></div>
+    <div class="tool-card"><h3>scroll</h3><p>Scroll up/down</p></div>
+    <div class="tool-card"><h3>get_tabs</h3><p>List all open tabs</p></div>
+    <div class="tool-card"><h3>switch_tab</h3><p>Activate a specific tab</p></div>
+    <div class="tool-card"><h3>close_tab</h3><p>Close a tab</p></div>
+    <div class="tool-card"><h3>evaluate</h3><p>Run JavaScript in page</p></div>
+    <div class="tool-card"><h3>get_page_info</h3><p>Title, URL, viewport</p></div>
+    <div class="tool-card"><h3>fill_form</h3><p>Fill multiple form fields</p></div>
+    <div class="tool-card"><h3>wait</h3><p>Wait N milliseconds</p></div>
+    <div class="tool-card"><h3>press_key</h3><p>Simulate keyboard input</p></div>
+    <div class="tool-card"><h3>get_links</h3><p>Extract all links</p></div>
+    <div class="tool-card"><h3>start_recording</h3><p>Record browser actions</p></div>
+    <div class="tool-card"><h3>stop_recording</h3><p>Stop & return JSON</p></div>
+    <div class="tool-card"><h3>playback</h3><p>Replay recorded actions</p></div>
+    <div class="tool-card"><h3>detect_forms</h3><p>Auto-detect all forms</p></div>
+    <div class="tool-card"><h3>auto_fill_form</h3><p>AI-fill a form</p></div>
+    <div class="tool-card"><h3>create_tab</h3><p>Open new tab</p></div>
+    <div class="tool-card"><h3>batch_execute</h3><p>Run multiple tools in sequence</p></div>
+    <div class="tool-card"><h3>get_console_logs</h3><p>Capture console output</p></div>
+    <div class="tool-card"><h3>get_network_requests</h3><p>Capture network traffic</p></div>
+    <div class="tool-card pro"><h3>highlight</h3><p>Visual element highlighting</p></div>
+    <div class="tool-card pro"><h3>wait_for_element</h3><p>Auto-wait for element</p></div>
+    <div class="tool-card pro"><h3>get_interactive_elements</h3><p>List elements with IDs</p></div>
+    <div class="tool-card pro"><h3>click_by_id</h3><p>Click by element ID</p></div>
+    <div class="tool-card pro"><h3>type_by_id</h3><p>Type by element ID</p></div>
+    <div class="tool-card pro"><h3>click_text</h3><p>Click by visible text</p></div>
+    <div class="tool-card pro"><h3>hover</h3><p>Hover over element</p></div>
+    <div class="tool-card pro"><h3>drag_and_drop</h3><p>Drag element A to B</p></div>
+    <div class="tool-card pro"><h3>handle_dialog</h3><p>Accept/dismiss dialogs</p></div>
+    <div class="tool-card pro"><h3>get_markdown</h3><p>Export page as Markdown</p></div>
+  </div>
+</section>
+
+<!-- ═══ Pricing ═══ -->
+<section class="section" id="pro">
+  <h2>Simple Pricing</h2>
+  <p class="section-subtitle">Free forever. Pro is a one-time purchase.</p>
+  <div class="pricing">
+    <div class="price-card">
+      <div class="price-name">Free</div>
+      <div class="price-amount">$0</div>
+      <div class="price-period">forever</div>
+      <ul>
+        <li>25 MCP tools (Core + Advanced)</li>
+        <li>Navigate, click, type, screenshot</li>
+        <li>Recording & Playback</li>
+        <li>Batch Execute</li>
+        <li>Console & Network Capture</li>
+        <li>Form Detection & Auto-Fill</li>
+        <li class="no">10 Pro Tools</li>
+        <li class="no">Element Highlighting</li>
+        <li class="no">Markdown Export</li>
+      </ul>
+      <a class="btn btn-secondary" href="#install">Get Started</a>
+    </div>
+    <div class="price-card featured">
+      <div class="price-name">⭐ Pro</div>
+      <div class="price-amount">$9</div>
+      <div class="price-period">one-time purchase</div>
+      <ul>
+        <li>Everything in Free</li>
+        <li>10 additional Pro tools</li>
+        <li>Element Highlighting</li>
+        <li>Auto-Wait for Elements</li>
+        <li>Interactive Element IDs</li>
+        <li>Click by Text / ID</li>
+        <li>Hover & Drag-and-Drop</li>
+        <li>Dialog Handling</li>
+        <li>Markdown Export</li>
+      </ul>
+      <a class="btn btn-amber" href="https://tabtii.lemonsqueezy.com/checkout/buy/ee56313d-60e1-4181-9b5b-48a9183f469c" target="_blank" rel="noopener">Get Pro — €9</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ Buy / License Activation ═══ -->
+<section class="section" id="buy">
+  <h2>Activate Pro</h2>
+  <p class="section-subtitle">Purchase a license key and activate it in the extension popup.</p>
+  <div class="license-section">
+    <p style="margin-bottom: 20px; color: var(--text-dim);">
+      <strong style="color: var(--text);">Step 1:</strong> Click "Buy Pro" below to purchase via LemonSqueezy.<br>
+      <strong style="color: var(--text);">Step 2:</strong> You'll receive a license key by email (32 characters, groups of 8, hyphenated).<br>
+      <strong style="color: var(--text);">Step 3:</strong> Paste it into the BrowserMCP extension popup → Pro section → Activate.
+    </p>
+    <a class="btn btn-amber" href="https://tabtii.lemonsqueezy.com/checkout/buy/ee56313d-60e1-4181-9b5b-48a9183f469c" target="_blank" rel="noopener" style="width: 100%; justify-content: center; margin-bottom: 16px;">
+      💳 Buy BrowserMCP Pro — €9
+    </a>
+    <p class="license-note">
+      One-time payment · Lifetime license · Works offline · No subscription<br>
+      Questions? <a href="https://github.com/Tabtii/browser-mcp/issues">Contact us</a>
+    </p>
+  </div>
+</section>
+
+<!-- ═══ Quick Start ═══ -->
+<section class="section" id="install">
+  <h2>Quick Start</h2>
+  <p class="section-subtitle">Running in 3 steps. No npm. No pip. No dependencies.</p>
+  <div class="quickstart">
+    <h3>1. Install Extension</h3>
+    <ol>
+      <li>Download from <a href="https://github.com/Tabtii/browser-mcp">GitHub</a> or <a href="#">Chrome Web Store</a></li>
+      <li>Open <code>chrome://extensions/</code></li>
+      <li>Enable <strong>Developer mode</strong> (top right)</li>
+      <li>Click <strong>Load unpacked</strong> → select the <code>browser-mcp</code> folder</li>
+    </ol>
+    <h3 style="margin-top: 24px;">2. Start Relay</h3>
+    <pre><code>python3 relay.py</code></pre>
+    <p style="color: var(--text-dim); font-size: 13px;">Python 3 is pre-installed on macOS and Linux. On Windows, download from python.org.</p>
+    <h3 style="margin-top: 24px;">3. Connect Your AI Agent</h3>
+    <p>Add to your MCP client config (Cursor, Claude Desktop, etc.):</p>
+    <pre><code>{
+  "mcpServers": {
+    "browser-mcp": {
+      "command": "python3",
+      "args": ["path/to/relay.py"]
+    }
+  }
+}</code></pre>
+    <p style="color: var(--text-dim); font-size: 13px;">Click the BrowserMCP extension icon → <strong>Start</strong>. Done!</p>
+  </div>
+</section>
+
+<!-- ═══ Architecture ═══ -->
+<section class="section">
+  <h2>Architecture</h2>
+  <p class="section-subtitle">Minimal, local, transparent.</p>
+  <div class="quickstart">
+    <pre><code>AI Agent (Claude / Cursor / Hermes)
+    ↕ stdio (JSON-RPC)
+relay.py (Python, zero deps)
+    ↕ WebSocket (ws://127.0.0.1:9274)
+Chrome Extension (offscreen document)
+    ↕ chrome.scripting API
+Browser Tab</code></pre>
+    <p style="color: var(--text-dim); margin-top: 16px; text-align: center;">
+      All processing happens locally. No cloud. No telemetry. No external servers.
+    </p>
+  </div>
+</section>
+
+<!-- ═══ Footer ═══ -->
+<footer class="footer">
+  <div class="footer-links">
+    <a href="https://github.com/Tabtii/browser-mcp">GitHub</a>
+    <a href="https://github.com/Tabtii/browser-mcp/issues">Issues</a>
+    <a href="#pro">Pricing</a>
+    <a href="#install">Install</a>
+    <a href="https://modelcontextprotocol.io">MCP Protocol</a>
+  </div>
+  <p>BrowserMCP v0.4.0 · MIT License · Made with 🤖 by <a href="https://github.com/Tabtii">Tabtii</a></p>
+</footer>
+
+</body>
+</html>

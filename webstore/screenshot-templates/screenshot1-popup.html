@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>BrowserMCP — Screenshot Template 1: Popup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1280px;
+    height: 800px;
+    background: #0F1512;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .browser-mockup {
+    width: 1100px;
+    height: 700px;
+    background: #1A221E;
+    border-radius: 12px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 40px;
+    position: relative;
+    border: 1px solid #2A3A32;
+  }
+  .browser-topbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 36px;
+    background: #0F1512;
+    border-radius: 12px 12px 0 0;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 8px;
+    border-bottom: 1px solid #2A3A32;
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot-r { background: #E55934; }
+  .dot-y { background: #E8A33D; }
+  .dot-g { background: #52B788; }
+  .url-bar {
+    margin-left: 16px;
+    background: #1A221E;
+    border-radius: 6px;
+    padding: 4px 12px;
+    color: #8A9B91;
+    font-size: 13px;
+    flex: 1;
+    max-width: 400px;
+  }
+  /* Popup */
+  .popup {
+    width: 360px;
+    background: #0F1512;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    margin-top: 20px;
+  }
+  .popup-header {
+    background: linear-gradient(135deg, #2D6A4F 0%, #52B788 100%);
+    padding: 20px;
+    text-align: center;
+  }
+  .popup-header h1 { font-size: 20px; font-weight: 900; color: white; }
+  .popup-header p { font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 4px; }
+  .status-card {
+    margin: 16px;
+    background: #1A221E;
+    border-radius: 16px;
+    padding: 20px;
+  }
+  .status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .status-label { font-size: 13px; color: #8A9B91; }
+  .status-value { font-size: 14px; font-weight: 700; color: #E2E9E5; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; background: #E8A33D; }
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 700;
+    margin-top: 8px;
+    background: #2D6A4F;
+    color: white;
+  }
+  .config-section { margin: 16px; background: #1A221E; border-radius: 16px; padding: 16px; }
+  .config-label { font-size: 12px; color: #8A9B91; margin-bottom: 4px; }
+  .config-value { font-size: 13px; color: #52B788; font-family: 'Courier New', monospace; background: #0F1512; padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; }
+  .tool-list { margin: 16px; background: #1A221E; border-radius: 16px; padding: 16px; }
+  .tool-list h3 { font-size: 14px; font-weight: 700; color: #E2E9E5; margin-bottom: 8px; }
+  .tool-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tool-chip { font-size: 11px; padding: 4px 10px; background: #2A3A32; border-radius: 8px; color: #52B788; }
+  .footer { text-align: center; padding: 12px; font-size: 11px; color: #6B7B72; }
+  /* Badge annotation */
+  .annotation {
+    position: absolute;
+    right: 40px;
+    top: 120px;
+    background: #2D6A4F;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .annotation::after {
+    content: "";
+    position: absolute;
+    left: -10px;
+    top: 50%;
+    border-style: solid;
+    border-width: 8px 10px 8px 0;
+    border-color: transparent #2D6A4F transparent transparent;
+    transform: translateY(-50%);
+  }
+</style>
+</head>
+<body>
+  <div class="browser-mockup">
+    <div class="browser-topbar">
+      <span class="dot dot-r"></span>
+      <span class="dot dot-y"></span>
+      <span class="dot dot-g"></span>
+      <div class="url-bar">chrome-extension://browsermcp/popup.html</div>
+    </div>
+    <div class="popup">
+      <div class="popup-header">
+        <h1>🌐 BrowserMCP</h1>
+        <p>AI Browser Control via MCP</p>
+      </div>
+      <div class="status-card">
+        <div class="status-row">
+          <span class="status-label">Server Status</span>
+          <span class="status-value"><span class="status-dot"></span>Läuft</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">WebSocket</span>
+          <span class="status-value" style="color: #E8A33D;">ws://localhost:9274</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">AI Agent</span>
+          <span class="status-value" style="color: #52B788;">Verbunden ✓</span>
+        </div>
+        <button class="btn">Stop</button>
+      </div>
+      <div class="config-section">
+        <div class="config-label">MCP Client Konfiguration</div>
+        <div class="config-value">python3 relay.py</div>
+        <div class="config-label">JSON Config (Cursor / Claude)</div>
+        <div class="config-value">{"mcpServers":{"browser-mcp":{"command":"python3","args":["relay.py"]}}}</div>
+      </div>
+      <div class="tool-list">
+        <h3>🛠️ 35 Tools verfügbar</h3>
+        <div class="tool-grid">
+          <span class="tool-chip">navigate</span>
+          <span class="tool-chip">screenshot</span>
+          <span class="tool-chip">get_dom</span>
+          <span class="tool-chip">click</span>
+          <span class="tool-chip">type_text</span>
+          <span class="tool-chip">extract_text</span>
+          <span class="tool-chip">scroll</span>
+          <span class="tool-chip">get_tabs</span>
+          <span class="tool-chip">switch_tab</span>
+          <span class="tool-chip">close_tab</span>
+          <span class="tool-chip">evaluate</span>
+          <span class="tool-chip">get_page_info</span>
+          <span class="tool-chip">fill_form</span>
+          <span class="tool-chip">wait</span>
+          <span class="tool-chip">press_key</span>
+          <span class="tool-chip">get_links</span>
+        </div>
+      </div>
+      <div class="footer">BrowserMCP v0.3.0 · Zero-setup · No npm</div>
+    </div>
+    <div class="annotation">Popup with 35 Tools</div>
+  </div>
+</body>
+</html>

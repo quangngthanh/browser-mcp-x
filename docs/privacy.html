@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Privacy Policy — BrowserMCP</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.6;
+         color: #1a1a1a; }
+  h1 { font-size: 28px; border-bottom: 1px solid #e5e5e5; padding-bottom: 8px; }
+  h2 { font-size: 20px; margin-top: 32px; }
+  .updated { color: #666; font-size: 14px; }
+  ul { padding-left: 22px; }
+  code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 90%; }
+</style>
+</head>
+<body>
+
+<h1>Privacy Policy — BrowserMCP</h1>
+<p class="updated">Last updated: July 4, 2026</p>
+
+<p>
+BrowserMCP ("the extension", "we") is a browser-automation tool that lets a local
+AI agent control your Chrome browser via the Model Context Protocol (MCP).
+This page explains what data the extension accesses, what it stores, and what it
+transmits.
+</p>
+
+<h2>Summary</h2>
+<ul>
+  <li><strong>No data leaves your machine.</strong> All processing is local.</li>
+  <li><strong>No analytics, no tracking, no third parties.</strong></li>
+  <li>The only network endpoint is the optional local relay server you start
+      yourself, bound to <code>127.0.0.1</code>.</li>
+</ul>
+
+<h2>Data we access</h2>
+<p>
+To provide browser-control tools (click, type, screenshot, extract text,
+navigate, manage tabs, etc.) the extension needs to read and interact with the
+content of the web pages you explicitly target through an MCP tool call. This
+happens only when <em>you</em> invoke a tool — there is no background scraping
+or polling.
+</p>
+
+<h2>Data we store</h2>
+<p>
+The extension stores the following locally on your device via
+<code>chrome.storage.local</code>:
+</p>
+<ul>
+  <li>Relay server status (on/off) and configured port number</li>
+  <li>Optional Pro license key (validated locally; never transmitted)</li>
+  <li>Temporary recording sessions for the <code>start_recording</code> /
+      <code>playback</code> tools</li>
+</ul>
+<p>
+No browsing history, no page content, no form input, and no credentials are
+written to persistent storage.
+</p>
+
+<h2>Data we transmit</h2>
+<p>
+The extension communicates only with the local relay server bound to
+<code>127.0.0.1</code> (default port 9275). All traffic stays on your machine.
+</p>
+<p>
+The Content Security Policy (<code>connect-src</code>) restricts outbound
+connections to <code>localhost</code> and <code>127.0.0.1</code> only — the
+extension cannot reach any external host.
+</p>
+
+<h2>Permissions explained</h2>
+<ul>
+  <li><code>activeTab</code> — only the tab you are currently interacting with is accessed, and only for the duration of a tool call.</li>
+  <li><code>tabs</code> — list, switch, create, and close tabs (no content from other tabs is read).</li>
+  <li><code>scripting</code> — inject JavaScript into a page to power click/type/extract tools, only on explicit tool calls.</li>
+  <li><code>storage</code> — save local preferences listed above.</li>
+  <li><code>debugger</code> — capture pixel-accurate screenshots via the Chrome DevTools Protocol.</li>
+  <li><code>offscreen</code> — host a persistent WebSocket to the local relay (MV3 service workers cannot hold WebSockets directly).</li>
+  <li><code>host_permissions: &lt;all_urls&gt;</code> — the extension is a general browser-control tool, so it must work on any page the user targets.</li>
+</ul>
+
+<h2>Children's privacy</h2>
+<p>
+BrowserMCP is not directed to children under the age of 13 and we do not
+knowingly collect any information from children.
+</p>
+
+<h2>Changes to this policy</h2>
+<p>
+We may update this policy as the extension evolves. The "Last updated" date
+above will reflect the most recent change. Material changes will be noted in
+the extension's release notes on GitHub.
+</p>
+
+<h2>Contact</h2>
+<p>
+Questions or concerns: <a href="mailto:torbi95@gmail.com">torbi95@gmail.com</a><br>
+Source code &amp; issue tracker:
+<a href="https://github.com/Tabtii/browser-mcp">github.com/Tabtii/browser-mcp</a>
+</p>
+
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>BrowserMCP — Screenshot Template 4: Tools</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1280px;
+    height: 800px;
+    background: #0F1512;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    color: #E2E9E5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+  }
+  .header { text-align: center; margin-bottom: 32px; }
+  .header h1 { font-size: 32px; font-weight: 900; }
+  .header h1 .accent { color: #52B788; }
+  .header p { font-size: 14px; color: #8A9B91; margin-top: 4px; }
+  .tools-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    max-width: 1100px;
+  }
+  .tool-card {
+    background: #1A221E;
+    border: 1px solid #2A3A32;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    transition: all 0.3s;
+  }
+  .tool-card:hover { border-color: #52B788; }
+  .tool-icon { font-size: 28px; margin-bottom: 8px; }
+  .tool-name { font-size: 14px; font-weight: 700; color: #52B788; }
+  .tool-desc { font-size: 11px; color: #8A9B91; margin-top: 4px; }
+  .footer {
+    margin-top: 32px;
+    display: flex;
+    gap: 24px;
+  }
+  .stat {
+    text-align: center;
+  }
+  .stat .num { font-size: 28px; font-weight: 900; color: #52B788; }
+  .stat .label { font-size: 12px; color: #8A9B91; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>🛠️ 16 <span class="accent">MCP Tools</span></h1>
+    <p>Vollständige Browser-Kontrolle für AI-Agenten</p>
+  </div>
+  <div class="tools-grid">
+    <div class="tool-card"><div class="tool-icon">🧭</div><div class="tool-name">navigate</div><div class="tool-desc">URL ansteuern</div></div>
+    <div class="tool-card"><div class="tool-icon">📸</div><div class="tool-name">screenshot</div><div class="tool-desc">Tab erfassen</div></div>
+    <div class="tool-card"><div class="tool-icon">🌳</div><div class="tool-name">get_dom</div><div class="tool-desc">DOM extrahieren</div></div>
+    <div class="tool-card"><div class="tool-icon">🖱️</div><div class="tool-name">click</div><div class="tool-desc">Element klicken</div></div>
+    <div class="tool-card"><div class="tool-icon">⌨️</div><div class="tool-name">type_text</div><div class="tool-desc">Text eingeben</div></div>
+    <div class="tool-card"><div class="tool-icon">📄</div><div class="tool-name">extract_text</div><div class="tool-desc">Text extrahieren</div></div>
+    <div class="tool-card"><div class="tool-icon">📜</div><div class="tool-name">scroll</div><div class="tool-desc">Scrollen</div></div>
+    <div class="tool-card"><div class="tool-icon">📑</div><div class="tool-name">get_tabs</div><div class="tool-desc">Tabs auflisten</div></div>
+    <div class="tool-card"><div class="tool-icon">🔄</div><div class="tool-name">switch_tab</div><div class="tool-desc">Tab wechseln</div></div>
+    <div class="tool-card"><div class="tool-icon">❌</div><div class="tool-name">close_tab</div><div class="tool-desc">Tab schließen</div></div>
+    <div class="tool-card"><div class="tool-icon">⚡</div><div class="tool-name">evaluate</div><div class="tool-desc">JS ausführen</div></div>
+    <div class="tool-card"><div class="tool-icon">ℹ️</div><div class="tool-name">get_page_info</div><div class="tool-desc">Metadaten</div></div>
+    <div class="tool-card"><div class="tool-icon">📝</div><div class="tool-name">fill_form</div><div class="tool-desc">Formular ausfüllen</div></div>
+    <div class="tool-card"><div class="tool-icon">⏳</div><div class="tool-name">wait</div><div class="tool-desc">Warten</div></div>
+    <div class="tool-card"><div class="tool-icon">🎹</div><div class="tool-name">press_key</div><div class="tool-desc">Tastendruck</div></div>
+    <div class="tool-card"><div class="tool-icon">🔗</div><div class="tool-name">get_links</div><div class="tool-desc">Links extrahieren</div></div>
+  </div>
+  <div class="footer">
+    <div class="stat"><div class="num">16</div><div class="label">MCP Tools</div></div>
+    <div class="stat"><div class="num">0</div><div class="label">Externe Abhängigkeiten</div></div>
+    <div class="stat"><div class="num">100%</div><div class="label">Lokal</div></div>
+    <div class="stat"><div class="num">~50KB</div><div class="label">Extension Größe</div></div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>BrowserMCP — Screenshot Template 2: AI Agent Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1280px;
+    height: 800px;
+    background: #0F1512;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    display: flex;
+  }
+  /* Left: AI Agent panel */
+  .agent-panel {
+    width: 500px;
+    height: 100%;
+    background: #1A221E;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    border-right: 1px solid #2A3A32;
+  }
+  .agent-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .agent-logo {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, #2D6A4F 0%, #52B788 100%);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+  .agent-name { font-size: 18px; font-weight: 700; color: #E2E9E5; }
+  .agent-sub { font-size: 12px; color: #8A9B91; }
+  .chat-msg {
+    background: #0F1512;
+    border-radius: 12px;
+    padding: 14px 16px;
+    max-width: 90%;
+  }
+  .chat-msg.user { background: #2D6A4F; color: white; align-self: flex-end; }
+  .chat-msg.assistant { color: #E2E9E5; }
+  .chat-msg .label { font-size: 11px; color: #8A9B91; margin-bottom: 4px; }
+  .chat-msg.user .label { color: rgba(255,255,255,0.7); }
+  .tool-call {
+    background: #2A3A32;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 8px 0;
+    border-left: 3px solid #52B788;
+  }
+  .tool-call .tool-name { font-size: 13px; font-weight: 700; color: #52B788; }
+  .tool-call .tool-args { font-size: 12px; color: #8A9B91; font-family: 'Courier New', monospace; margin-top: 4px; }
+  .tool-result {
+    font-size: 12px; color: #8A9B91;
+    padding: 6px 0 6px 12px;
+    border-left: 2px solid #2A3A32;
+    margin-left: 4px;
+  }
+  /* Right: Browser mockup */
+  .browser-side {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+  }
+  .browser-window {
+    width: 100%;
+    max-width: 640px;
+    height: 480px;
+    background: #1A221E;
+    border-radius: 12px;
+    border: 1px solid #2A3A32;
+    overflow: hidden;
+  }
+  .browser-topbar {
+    height: 36px;
+    background: #0F1512;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 8px;
+    border-bottom: 1px solid #2A3A32;
+  }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot-r { background: #E55934; }
+  .dot-y { background: #E8A33D; }
+  .dot-g { background: #52B788; }
+  .url-bar {
+    margin-left: 16px;
+    background: #1A221E;
+    border-radius: 6px;
+    padding: 4px 12px;
+    color: #52B788;
+    font-size: 13px;
+    flex: 1;
+  }
+  .browser-content {
+    padding: 32px;
+    color: #E2E9E5;
+  }
+  .browser-content h1 { font-size: 24px; margin-bottom: 16px; }
+  .browser-content p { font-size: 14px; color: #8A9B91; margin-bottom: 12px; line-height: 1.6; }
+  .search-box {
+    background: #0F1512;
+    border: 2px solid #52B788;
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: #E2E9E5;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cursor-blink {
+    width: 2px; height: 18px;
+    background: #52B788;
+    animation: blink 1s infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .badge {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    background: linear-gradient(135deg, #2D6A4F, #52B788);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .connection-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .conn-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #52B788;
+    box-shadow: 0 0 8px #52B788;
+  }
+  .conn-text { font-size: 12px; color: #52B788; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="agent-panel">
+    <div class="agent-header">
+      <div class="agent-logo">🤖</div>
+      <div>
+        <div class="agent-name">Cursor AI</div>
+        <div class="agent-sub">Verbunden via MCP</div>
+      </div>
+    </div>
+    <div class="connection-indicator">
+      <span class="conn-dot"></span>
+      <span class="conn-text">BrowserMCP — Aktive Verbindung</span>
+    </div>
+    <div class="chat-msg user">
+      <div class="label">User</div>
+      Öffne google.com und suche nach "MCP Protocol"
+    </div>
+    <div class="chat-msg assistant">
+      <div class="label">AI Agent</div>
+      <div class="tool-call">
+        <div class="tool-name">→ navigate</div>
+        <div class="tool-args">url: "https://google.com"</div>
+      </div>
+      <div class="tool-result">✓ Navigated to https://google.com</div>
+      <div class="tool-call">
+        <div class="tool-name">→ click</div>
+        <div class="tool-args">selector: "input[name='q']"</div>
+      </div>
+      <div class="tool-result">✓ Clicked: input[name='q']</div>
+      <div class="tool-call">
+        <div class="tool-name">→ type_text</div>
+        <div class="tool-args">selector: "input[name='q']", text: "MCP Protocol"</div>
+      </div>
+      <div class="tool-result">✓ Typed "MCP Protocol" into input[name='q']</div>
+      <div class="tool-call">
+        <div class="tool-name">→ press_key</div>
+        <div class="tool-args">key: "Enter"</div>
+      </div>
+      <div class="tool-result">✓ Pressed Enter</div>
+    </div>
+  </div>
+  <div class="browser-side" style="position: relative;">
+    <div class="badge">Live Demo</div>
+    <div class="browser-window">
+      <div class="browser-topbar">
+        <span class="dot dot-r"></span>
+        <span class="dot dot-y"></span>
+        <span class="dot dot-g"></span>
+        <div class="url-bar">https://google.com/search?q=MCP+Protocol</div>
+      </div>
+      <div class="browser-content">
+        <h1>Google Suche</h1>
+        <div class="search-box">
+          <span>MCP Protocol</span>
+          <span class="cursor-blink"></span>
+        </div>
+        <p>Suchergebnisse werden geladen...</p>
+        <p style="color: #52B788; margin-top: 24px;">→ AI Agent hat diese Seite automatisch gesteuert</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

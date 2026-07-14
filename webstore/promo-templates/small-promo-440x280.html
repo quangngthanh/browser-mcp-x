@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>BrowserMCP — Small Promo Tile (440×280)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 440px;
+    height: 280px;
+    background: linear-gradient(135deg, #0F1512 0%, #1A221E 100%);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #E2E9E5;
+    position: relative;
+  }
+  .glow {
+    position: absolute;
+    top: -60px;
+    right: -60px;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(82,183,136,0.2) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .logo {
+    font-size: 48px;
+    margin-bottom: 8px;
+  }
+  .title { font-size: 28px; font-weight: 900; }
+  .title .accent { color: #52B788; }
+  .tagline { font-size: 14px; color: #8A9B91; margin-top: 6px; }
+  .features {
+    display: flex;
+    gap: 16px;
+    margin-top: 20px;
+  }
+  .chip {
+    background: #1A221E;
+    border: 1px solid #2D6A4F;
+    color: #52B788;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 6px;
+  }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="logo">🌐</div>
+  <div class="title">Browser<span class="accent">MCP</span></div>
+  <div class="tagline">AI Browser Control via MCP</div>
+  <div class="features">
+    <span class="chip">16 Tools</span>
+    <span class="chip">100% Lokal</span>
+    <span class="chip">Zero npm</span>
+  </div>
+</body>
+</html>
