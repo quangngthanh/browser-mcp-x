@@ -5,6 +5,13 @@ All notable changes to BrowserMCP will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`snapshot`** — Capture ARIA accessibility tree (roles, labels, states) for the current page
+- **`select_option`** — Select a `<select>` option by value, text, or index (returns updated snapshot)
+- Docs updated to list all **37** MCP tools
+
 ## [0.4.0] — 2026-07-03
 
 ### Added

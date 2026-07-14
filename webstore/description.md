@@ -11,9 +11,9 @@ BrowserMCP turns Chrome into an MCP server (Model Context Protocol). Connect AI 
 3. **Connect AI agent** — Add MCP config, done
 4. **Click Start** — BrowserMCP icon → Start
 
-### 35 MCP Tools
+### 37 MCP Tools
 
-**Core:** navigate, screenshot, get_dom, click, type_text, extract_text, scroll, get_tabs, switch_tab, close_tab, evaluate, get_page_info, fill_form, wait, press_key, get_links
+**Core:** navigate, screenshot, get_dom, snapshot, click, type_text, select_option, extract_text, scroll, get_tabs, switch_tab, close_tab, evaluate, get_page_info, fill_form, wait, press_key, get_links
 
 **Advanced:** start_recording, stop_recording, playback, detect_forms, auto_fill_form, create_tab, batch_execute, get_console_logs, get_network_requests
 

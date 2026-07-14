@@ -42,7 +42,7 @@ Fünf finale PNGs für den Chrome-Web-Store-Upload der BrowserMCP-Extension (Ver
   “Give AI agents control over your browser. Zero setup. 100% local.”  
   Farbe: `#8A9B91`, ca. 22 px
 - **Feature-Chips (links unter Subheadline):** abgerundete Pillen/Chips mit `#2D6A4F` Border und `#52B788` Text:
-  - 35 MCP Tools
+  - 37 MCP Tools
   - 100% Local
   - Zero npm
   - ~60 KB
@@ -63,7 +63,7 @@ Fünf finale PNGs für den Chrome-Web-Store-Upload der BrowserMCP-Extension (Ver
 - **Top:** Logo-Mark (Globus) + “BrowserMCP” Headline, “MCP” akzentuiert
 - **Darunter:** Tagline “AI Browser Control via Model Context Protocol”
 - **4 Feature-Karten (2×2 Grid):** abgerundet 12 px, `#1A221E` mit `#2A3A32` Border
-  - 🛠️ 35 Tools — Full browser control
+  - 🛠️ 37 Tools — Full browser control
   - 🔒 100% Local — No telemetry
   - ⚡ Zero npm — Python 3 only
   - 🌐 Your session — Logged-in tabs
@@ -78,7 +78,7 @@ Fünf finale PNGs für den Chrome-Web-Store-Upload der BrowserMCP-Extension (Ver
 - **Oben:** Logo-Mark 48 px
 - **Headline:** “BrowserMCP”, “MCP” in `#52B788`
 - **Subline:** “AI Browser Control via MCP”
-- **3 Chips horizontal:** 35 Tools | 100% Local | Zero npm
+- **3 Chips horizontal:** 37 Tools | 100% Local | Zero npm
 - Hintergrund: gleicher dunkler Gradient mit einem kleinen, subtilen grünen Glow
 
 ## 4–8. Screenshots — 1280 × 800 px (max. 5 Stück)
@@ -106,8 +106,8 @@ AI Agent (Claude / Cursor / Hermes)
 Farben: Dark-Hintergrund, `#52B788` für Pfeile/Headlines, `#1A221E` für Boxen.
 
 ### Screenshot 4 — MCP Tool-Grid
-Großes, scrollbares Tool-Grid mit allen 35 Tool-Namen als farbige Chips/Kacheln, eingeteilt in Gruppen:
-- Core (navigate, screenshot, click, type_text, extract_text, scroll, get_tabs, switch_tab, close_tab, get_page_info, fill_form, press_key)
+Großes, scrollbares Tool-Grid mit allen 37 Tool-Namen als farbige Chips/Kacheln, eingeteilt in Gruppen:
+- Core (navigate, screenshot, get_dom, snapshot, click, type_text, select_option, extract_text, scroll, get_tabs, switch_tab, close_tab, get_page_info, fill_form, press_key)
 - Advanced (start_recording, playback, batch_execute, get_console_logs, get_network_requests, auto_fill_form)
 - Pro (highlight, wait_for_element, get_interactive_elements, click_by_id, type_by_id, click_text, hover, drag_and_drop, handle_dialog, get_markdown)
 

@@ -1,11 +1,11 @@
 # BrowserMCP — AI Browser Control via MCP
 
-> Turn Chrome into an MCP server. Let AI agents control your browser. Zero setup. 35 tools. No npm. No dependencies.
+> Turn Chrome into an MCP server. Let AI agents control your browser. Zero setup. 37 tools. No npm. No dependencies.
 
 [![Chrome MV3](https://img.shields.io/badge/Chrome-MV3-4285F4)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 [![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero-success)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/licenses/MIT)
-[![Tools: 35](https://img.shields.io/badge/MCP_Tools-35-blue)]()
+[![Tools: 37](https://img.shields.io/badge/MCP_Tools-37-blue)]()
 
 ## Why BrowserMCP?
 
@@ -14,7 +14,7 @@
 | **Setup** | 1 click + `python3 relay.py` | `npm install -g` + extension | `npm install playwright` + browser |
 | **Dependencies** | Python 3 (pre-installed) | Node.js + npm | Node.js + Playwright + browser binaries |
 | **User session** | ✅ Uses your logged-in tabs | ✅ Uses your logged-in tabs | ❌ Clean browser, no logins |
-| **Tools** | **35** (navigate, click, type, record, batch, forms, network, console, markdown, highlight, hover, drag-drop, dialogs, interactive elements, text-click...) | 20+ | ~10 |
+| **Tools** | **37** (navigate, click, type, snapshot, select_option, record, batch, forms, network, console, markdown, highlight, hover, drag-drop, dialogs, interactive elements, text-click...) | 20+ | ~10 |
 | **Size** | ~50KB extension + 13KB relay | ~500KB extension + npm package | 300MB+ |
 | **Recording/Playback** | ✅ Built-in | ❌ | ❌ |
 | **Batch Execute** | ✅ Built-in | ❌ | ❌ |
@@ -65,7 +65,7 @@ hermes mcp add browser-mcp --command "python3 /path/to/relay.py"
 
 Click the BrowserMCP extension icon → **Start**
 
-## 35 MCP Tools
+## 37 MCP Tools
 
 ### Core Tools (Free)
 | Tool | Description |
@@ -73,8 +73,10 @@ Click the BrowserMCP extension icon → **Start**
 | `navigate` | Navigate to a URL |
 | `screenshot` | Capture visible tab |
 | `get_dom` | Extract simplified accessibility tree |
+| `snapshot` | Capture ARIA accessibility tree (roles, labels, states) |
 | `click` | Click element by CSS selector |
 | `type_text` | Type text into a form field |
+| `select_option` | Select a `<select>` option by value, text, or index |
 | `extract_text` | Get text content from page/selector |
 | `scroll` | Scroll up/down |
 | `get_tabs` | List all open tabs |

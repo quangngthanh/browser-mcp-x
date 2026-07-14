@@ -48,7 +48,7 @@ zip -r /tmp/browsermcp-v0.4.0.zip .
 | **Language** | English (Standard) |
 | **Store listing language** | English |
 | **Name** | BrowserMCP — AI Browser Control via MCP |
-| **Short description** | `Turn Chrome into an MCP server. 35 tools: navigate, click, type, screenshot, record, batch, forms, network, markdown, hover, drag-drop. 100% local. Zero npm.` |
+| **Short description** | `Turn Chrome into an MCP server. 37 tools: navigate, click, type, snapshot, screenshot, record, batch, forms, network, markdown, hover, drag-drop. 100% local. Zero npm.` |
 | **Detailed description** | Inhalt aus `description.md` kopieren (max. 16.000 Zeichen). |
 
 ### Kategorie
@@ -104,7 +104,7 @@ Beim Hochladen fragt der Store nach Begründungen für jede Permission. Kopiere 
 ## Schritt 7 — Single-Purpose-Absatz
 Falls das Feld “Single Purpose Description” im Store erscheint, verwenden:
 
-> BrowserMCP has exactly one purpose: enabling users to control their Chrome browser remotely via the Model Context Protocol (MCP) from a local AI agent. All 35 tools — navigation, clicks, text input, screenshots, DOM extraction, form filling, tab management, recording — serve exclusively this purpose. There are no additional features, trackers, advertisements, or analytics.
+> BrowserMCP has exactly one purpose: enabling users to control their Chrome browser remotely via the Model Context Protocol (MCP) from a local AI agent. All 37 tools — navigation, clicks, text input, screenshots, DOM/ARIA snapshots, form filling, tab management, recording — serve exclusively this purpose. There are no additional features, trackers, advertisements, or analytics.
 
 ## Schritt 8 — Datennutzungserklärung
 Im Abschnitt **“Data usage”** / **“Datennutzung”** angeben:
