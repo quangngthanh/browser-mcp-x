@@ -454,9 +454,84 @@ def start_http_status():
     server.serve_forever()
 
 
+# ─── Proxy mode: forward stdio → existing relay HTTP ───
+
+def detect_running_relay() -> bool:
+    """Return True if another relay is already running on MCP_PORT."""
+    try:
+        import urllib.request
+        resp = urllib.request.urlopen(f"http://127.0.0.1:{MCP_PORT}", timeout=1)
+        data = json.loads(resp.read())
+        return data.get("name") == "browser-mcp"
+    except Exception:
+        return False
+
+
+def handle_stdio_proxy():
+    """Proxy mode: relay.py already running — forward stdio MCP to its HTTP endpoint."""
+    import urllib.request as _req
+    print(f"[BrowserMCP] Relay already running. Proxy mode → http://127.0.0.1:{MCP_PORT}/mcp", file=sys.stderr)
+
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except Exception:
+            continue
+
+        method = msg.get("method")
+        msg_id = msg.get("id")
+
+        # Handle handshake locally — no round-trip needed
+        if method == "notifications/initialized":
+            continue
+        if method == "initialize":
+            send_stdio({
+                "jsonrpc": "2.0", "id": msg_id,
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {"tools": {"listChanged": False}},
+                    "serverInfo": {"name": "browser-mcp", "version": VERSION},
+                },
+            })
+            continue
+        if method == "ping":
+            send_stdio({"jsonrpc": "2.0", "id": msg_id, "result": {}})
+            continue
+
+        # Forward everything else to the running relay's HTTP /mcp endpoint
+        try:
+            body = json.dumps(msg).encode()
+            request = _req.Request(
+                f"http://127.0.0.1:{MCP_PORT}/mcp",
+                data=body,
+                headers={"Content-Type": "application/json"},
+            )
+            resp = _req.urlopen(request, timeout=65)
+            send_stdio(json.loads(resp.read()))
+        except Exception as e:
+            if msg_id is not None:
+                send_stdio({
+                    "jsonrpc": "2.0", "id": msg_id,
+                    "error": {"code": -32603, "message": f"Proxy error: {e}"},
+                })
+
+
 # ─── Main ───
 
 if __name__ == "__main__":
+    if detect_running_relay():
+        # Another relay instance already owns the WebSocket + extension connection.
+        # Run as a thin proxy so multiple AI agents (Cursor, Claude Code, etc.)
+        # can share the same browser session without fighting over port 9274.
+        try:
+            handle_stdio_proxy()
+        except (KeyboardInterrupt, SystemExit):
+            pass
+        sys.exit(0)
+
     print(f"""
 ╔══════════════════════════════════════════╗
 ║       BrowserMCP Relay v{VERSION}            ║
@@ -483,11 +558,9 @@ if __name__ == "__main__":
         print("\n[BrowserMCP] Shutting down.", file=sys.stderr)
         sys.exit(0)
 
-    # If handle_stdio() returns (stdin EOF), keep server alive for HTTP/WebSocket clients
+    # stdin EOF — keep HTTP/WebSocket servers alive
     print("[BrowserMCP] stdio ended, keeping HTTP/WebSocket server alive...", file=sys.stderr)
     import signal
-    import time
-    # signal.pause() is Unix-only; on Windows wait until interrupted
     if hasattr(signal, "pause"):
         signal.pause()
     else:
