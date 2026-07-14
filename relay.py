@@ -167,14 +167,23 @@ def handle_extension_connection(conn, addr):
             extension_client = None
 
 
-def start_ws_server():
+def try_bind_ws_server():
+    """Try to exclusively bind the WebSocket port. Returns socket or None.
+    No SO_REUSEADDR — the bind result is the distributed mutex between relay instances.
+    """
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind(("127.0.0.1", WS_PORT))
-    server.listen(1)
+    try:
+        server.bind(("127.0.0.1", WS_PORT))
+        server.listen(5)
+        return server
+    except OSError:
+        server.close()
+        return None
+
+
+def run_ws_server(server: socket.socket):
     print(f"[BrowserMCP] WebSocket server listening on port {WS_PORT}", file=sys.stderr)
     print(f"[BrowserMCP] Waiting for Chrome extension to connect...", file=sys.stderr)
-
     while True:
         conn, addr = server.accept()
         threading.Thread(target=handle_extension_connection, args=(conn, addr), daemon=True).start()
@@ -457,14 +466,14 @@ def start_http_status():
 # ─── Proxy mode: forward stdio → existing relay HTTP ───
 
 def detect_running_relay() -> bool:
-    """Return True if another relay is already running on MCP_PORT."""
+    """Return True if another relay already owns the WebSocket port."""
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        import urllib.request
-        resp = urllib.request.urlopen(f"http://127.0.0.1:{MCP_PORT}", timeout=1)
-        data = json.loads(resp.read())
-        return data.get("name") == "browser-mcp"
-    except Exception:
-        return False
+        probe.bind(("127.0.0.1", WS_PORT))
+        probe.close()
+        return False  # port free → no relay running
+    except OSError:
+        return True   # port taken → relay already running
 
 
 def handle_stdio_proxy():
@@ -522,10 +531,11 @@ def handle_stdio_proxy():
 # ─── Main ───
 
 if __name__ == "__main__":
-    if detect_running_relay():
-        # Another relay instance already owns the WebSocket + extension connection.
-        # Run as a thin proxy so multiple AI agents (Cursor, Claude Code, etc.)
-        # can share the same browser session without fighting over port 9274.
+    # Try to exclusively claim the WebSocket port — first process wins, others proxy.
+    ws_server = try_bind_ws_server()
+
+    if ws_server is None:
+        # Port already taken → another relay is the server. Run as proxy.
         try:
             handle_stdio_proxy()
         except (KeyboardInterrupt, SystemExit):
@@ -549,7 +559,7 @@ if __name__ == "__main__":
   Press Ctrl+C to stop.
 """, file=sys.stderr)
 
-    threading.Thread(target=start_ws_server, daemon=True).start()
+    threading.Thread(target=run_ws_server, args=(ws_server,), daemon=True).start()
     threading.Thread(target=start_http_status, daemon=True).start()
 
     try:
