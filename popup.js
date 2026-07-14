@@ -15,26 +15,12 @@ chrome.runtime.sendMessage({ type: "GET_STATUS" }, (status) => {
 // Listen for status updates
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "CLIENT_CONNECTED") {
-    const agentStatus = document.getElementById("agentStatus");
-    if (agentStatus) {
-      agentStatus.textContent = "Connected ✓";
-      agentStatus.style.color = "#10b981"; // emerald-500
-    }
     const dot = document.getElementById("statusDot");
-    if (dot) {
-      dot.className = "status-dot dot-on";
-    }
+    if (dot) dot.className = "status-dot dot-on";
   }
   if (msg.type === "CLIENT_DISCONNECTED") {
-    const agentStatus = document.getElementById("agentStatus");
-    if (agentStatus) {
-      agentStatus.textContent = "Not Connected";
-      agentStatus.style.color = "#64748b"; // slate-500
-    }
     const dot = document.getElementById("statusDot");
-    if (dot) {
-      dot.className = "status-dot dot-waiting";
-    }
+    if (dot && isRunning) dot.className = "status-dot dot-waiting";
   }
 });
 
@@ -57,7 +43,6 @@ function updateUI(status) {
   const dot = document.getElementById("statusDot");
   const text = document.getElementById("statusText");
   const ws = document.getElementById("wsStatus");
-  const agentStatus = document.getElementById("agentStatus");
 
   if (isRunning) {
     if (btn) {
@@ -74,15 +59,6 @@ function updateUI(status) {
       ws.textContent = "ws://localhost:9274";
       ws.style.color = "#d97706"; // amber-600 (more readable on light background)
     }
-    if (agentStatus) {
-      if (status && status.clients > 0) {
-        agentStatus.textContent = "Connected ✓";
-        agentStatus.style.color = "#10b981"; // emerald-500
-      } else {
-        agentStatus.textContent = "Not Connected";
-        agentStatus.style.color = "#64748b"; // slate-500
-      }
-    }
   } else {
     if (btn) {
       btn.textContent = "Start";
@@ -97,10 +73,6 @@ function updateUI(status) {
     if (ws) {
       ws.textContent = "—";
       ws.style.color = "#64748b"; // slate-500
-    }
-    if (agentStatus) {
-      agentStatus.textContent = "Not Connected";
-      agentStatus.style.color = "#64748b"; // slate-500
     }
   }
 }
