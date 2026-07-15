@@ -1,1 +1,0 @@
-Turn Chrome into an MCP server. 35 tools: navigate, click, type, screenshot, record, batch, forms, network, markdown, hover, drag-drop. 100% local. Zero npm.
