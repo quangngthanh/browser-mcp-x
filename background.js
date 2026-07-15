@@ -337,23 +337,34 @@ async function executeTool(toolName, args) {
     }
 
     case "screenshot": {
-      // captureVisibleTab is the official screenshot API. It can, however,
-      // hang indefinitely if the Chrome window is minimized or the compositor
-      // is blocked. We therefore attach a hard timeout and return a helpful
-      // error instead of leaving the agent waiting.
-      const timeoutMs = 3000;
+      const timeoutMs = 5000;
       try {
-        await chrome.tabs.update(tab.id, { active: true });
-        // Attempt to bring the Chrome window to the foreground (best-effort).
+        // Remember which tab the user is viewing so we can restore it after capture
+        const [userTab] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
+        const needsSwitch = !userTab || userTab.id !== tab.id;
+
+        if (needsSwitch) {
+          await chrome.tabs.update(tab.id, { active: true });
+        }
         if (chrome.windows?.update) {
           try {
-            await chrome.windows.update(tab.windowId, { focused: true });
+            await chrome.windows.update(tab.windowId, { focused: true, state: "normal" });
           } catch (e) {}
         }
+        await new Promise(r => setTimeout(r, 350));
+
         const dataUrl = await Promise.race([
           chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error(`captureVisibleTab timed out after ${timeoutMs}ms — make sure the Chrome window is visible and focused.`)), timeoutMs))
+          new Promise((_, reject) => setTimeout(() => reject(new Error(
+            `captureVisibleTab timed out after ${timeoutMs}ms — make sure the Chrome window is visible and focused.`
+          )), timeoutMs))
         ]);
+
+        // Restore user's tab so the switch is barely noticeable
+        if (needsSwitch && userTab) {
+          await chrome.tabs.update(userTab.id, { active: true }).catch(() => {});
+        }
+
         return {
           content: [
             { type: "text", text: "Screenshot captured" },
