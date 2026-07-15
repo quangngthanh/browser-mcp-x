@@ -214,23 +214,53 @@ const MCP_TOOLS = [
 ];
 
 // ─── Agent Tab Lock ───
-// Once the agent starts working, lock to the tab that was active at that moment.
-// User switching tabs will not affect the agent's target tab.
-// Resets when the agent disconnects. Use switch_tab to change the target.
+// Persisted to chrome.storage.local so the agent resumes on its last tab
+// after reconnect or service-worker restart — not wherever the user happens to be.
 let agentTargetTabId = null;
 let activeManipulatedTabIds = new Set();
+
+function persistAgentContext() {
+  chrome.storage.local.set({
+    agentTargetTabId,
+    activeManipulatedTabIds: Array.from(activeManipulatedTabIds)
+  });
+}
+
+async function restoreAgentContext() {
+  const stored = await chrome.storage.local.get(["agentTargetTabId", "activeManipulatedTabIds"]);
+  if (stored.agentTargetTabId != null) {
+    try {
+      await chrome.tabs.get(stored.agentTargetTabId);
+      agentTargetTabId = stored.agentTargetTabId;
+    } catch (e) {
+      agentTargetTabId = null;
+    }
+  }
+  if (Array.isArray(stored.activeManipulatedTabIds)) {
+    for (const id of stored.activeManipulatedTabIds) {
+      try {
+        await chrome.tabs.get(id);
+        activeManipulatedTabIds.add(id);
+      } catch (e) { /* tab gone */ }
+    }
+  }
+  persistAgentContext();
+}
 
 async function getAgentTab() {
   if (agentTargetTabId !== null) {
     try {
       return await chrome.tabs.get(agentTargetTabId);
     } catch (e) {
-      // Tab was closed, fall through to re-acquire
       agentTargetTabId = null;
+      persistAgentContext();
     }
   }
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab) agentTargetTabId = tab.id;
+  if (tab) {
+    agentTargetTabId = tab.id;
+    persistAgentContext();
+  }
   return tab;
 }
 
@@ -514,6 +544,7 @@ async function executeTool(toolName, args) {
       }
       await chrome.tabs.update(targetTabId, { active: true });
       agentTargetTabId = targetTabId;
+      persistAgentContext();
       return { content: [{ type: "text", text: `Switched to tab ${targetTabId}` }] };
     }
 
@@ -1450,6 +1481,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.storage.local.set({ agentConnected: true });
     chrome.action.setBadgeText({ text: "ON" });
     chrome.action.setBadgeBackgroundColor({ color: "#52B788" });
+    restoreAgentContext();
     sendResponse({ ok: true });
     return false;
   }
@@ -1458,11 +1490,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     wsClients.delete(msg.clientId);
     if (wsClients.size === 0) {
       connectedAgent = null;
-      agentTargetTabId = null;
       chrome.storage.local.set({ agentConnected: false });
       chrome.action.setBadgeText({ text: isRunning ? "RDY" : "" });
     }
-    clearAllAgentFrames();
+    persistAgentContext();
     sendResponse({ ok: true });
     return false;
   }
@@ -1499,9 +1530,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // ─── Extension install ───
-chrome.runtime.onInstalled.addListener((details) => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === "install") {
     chrome.storage.local.set({ mcpRunning: false, mcpPort: null, agentConnected: false, autoStart: false });
+  } else {
+    await restoreAgentContext();
   }
   console.log(`[BrowserMCP] Extension ${details.reason}. MCP server ready to start.`);
 });
@@ -1510,6 +1543,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 // Without this, closing the popup can let Chrome suspend the worker and lose
 // the in-memory `isRunning` flag, causing offscreen reconnect logic to stop.
 chrome.runtime.onStartup.addListener(async () => {
+  await restoreAgentContext();
   const stored = await chrome.storage.local.get(["mcpRunning"]);
   if (stored.mcpRunning) await startServer();
 });
@@ -1522,7 +1556,9 @@ chrome.runtime.onSuspend.addListener(() => {
 // ─── Agent frame: soft gradient rim on tabs the agent has touched ───
 async function showAgentFrame(tabId) {
   if (!tabId) return;
+  const isNew = !activeManipulatedTabIds.has(tabId);
   activeManipulatedTabIds.add(tabId);
+  if (isNew) persistAgentContext();
   try {
     const tab = await chrome.tabs.get(tabId);
     if (!tab.url || !tab.url.startsWith("http")) return;
@@ -1622,6 +1658,8 @@ function removeAgentFrame() {
 async function clearAllAgentFrames() {
   const activeIds = Array.from(activeManipulatedTabIds);
   activeManipulatedTabIds.clear();
+  agentTargetTabId = null;
+  persistAgentContext();
   for (const tabId of activeIds) {
     try {
       await chrome.scripting.executeScript({
