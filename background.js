@@ -318,6 +318,23 @@ async function handleMcpRequest(message) {
   }
 }
 
+// ─── Debugger-based screenshot (works when window is minimized / GPU readback fails) ───
+async function captureWithDebugger(tabId) {
+  const target = { tabId };
+  let attached = false;
+  try {
+    await chrome.debugger.attach(target, "1.3");
+    attached = true;
+    const result = await Promise.race([
+      chrome.debugger.sendCommand(target, "Page.captureScreenshot", { format: "png" }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Debugger screenshot timed out after 10s")), 10000))
+    ]);
+    return `data:image/png;base64,${result.data}`;
+  } finally {
+    if (attached) await chrome.debugger.detach(target).catch(() => {});
+  }
+}
+
 // ─── Tool Execution ───
 async function executeTool(toolName, args) {
   const tab = await getAgentTab();
@@ -353,12 +370,19 @@ async function executeTool(toolName, args) {
         }
         await new Promise(r => setTimeout(r, 350));
 
-        const dataUrl = await Promise.race([
-          chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error(
-            `captureVisibleTab timed out after ${timeoutMs}ms — make sure the Chrome window is visible and focused.`
-          )), timeoutMs))
-        ]);
+        let dataUrl;
+        try {
+          dataUrl = await Promise.race([
+            chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error(
+              `captureVisibleTab timed out after ${timeoutMs}ms`
+            )), timeoutMs))
+          ]);
+        } catch (_) {
+          // captureVisibleTab failed (GPU readback error or timeout) — fall back to
+          // Chrome DevTools Protocol which captures directly from the compositor
+          dataUrl = await captureWithDebugger(tab.id);
+        }
 
         // Restore user's tab so the switch is barely noticeable
         if (needsSwitch && userTab) {
