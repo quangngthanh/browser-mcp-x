@@ -20,6 +20,7 @@ import base64
 import os
 import queue
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 
 MCP_PORT = 9275
 WS_PORT = 9274  # WebSocket port for extension connection
@@ -487,8 +488,11 @@ class StatusHandler(BaseHTTPRequestHandler):
         pass  # Suppress default logging
 
 
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+
 def start_http_status():
-    server = HTTPServer(("0.0.0.0", MCP_PORT), StatusHandler)
+    server = ThreadedHTTPServer(("0.0.0.0", MCP_PORT), StatusHandler)
     server.serve_forever()
 
 
