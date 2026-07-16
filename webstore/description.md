@@ -1,15 +1,15 @@
-# BrowserMCP — AI Browser Control via MCP
+# Browser MCP X — AI Browser Control via MCP
 
 ## Give AI agents control over your browser
 
-BrowserMCP turns Chrome into an MCP server (Model Context Protocol). Connect AI agents like Claude, Cursor, or any MCP client directly to your browser — no npm, no bridge process, no dependencies.
+Browser MCP X turns Chrome into an MCP server (Model Context Protocol). Connect AI agents like Claude, Cursor, or any MCP client directly to your browser — no npm, no bridge process, no dependencies.
 
 ### How it works
 
 1. **Install extension** — Load unpacked in `chrome://extensions/`
 2. **Start relay** — `python3 relay.py` (Python 3 is pre-installed on macOS/Linux)
 3. **Connect AI agent** — Add MCP config, done
-4. **Click Start** — BrowserMCP icon → Start
+4. **Click Start** — Browser MCP X icon → Start
 
 ### 37 MCP Tools
 
@@ -19,7 +19,7 @@ BrowserMCP turns Chrome into an MCP server (Model Context Protocol). Connect AI 
 
 **Pro:** highlight, wait_for_element, get_interactive_elements, click_by_id, type_by_id, click_text, hover, drag_and_drop, handle_dialog, get_markdown
 
-### Why BrowserMCP?
+### Why Browser MCP X?
 
 - **Zero-Setup** — No npm, no Node.js, no pip. Just `python3 relay.py`
 - **Your real session** — Uses your logged-in tabs, not a clean browser
@@ -33,7 +33,7 @@ BrowserMCP turns Chrome into an MCP server (Model Context Protocol). Connect AI 
 
 ### Privacy
 
-BrowserMCP transfers **no data to external servers**. The relay listens exclusively on `localhost`. All browser interaction happens locally via WebSocket on `127.0.0.1`. No telemetry, no tracking, no analytics.
+Browser MCP X transfers **no data to external servers**. The relay listens exclusively on `localhost`. All browser interaction happens locally via WebSocket on `127.0.0.1`. No telemetry, no tracking, no analytics.
 
 ### Requirements
 
@@ -48,7 +48,7 @@ Add this to your MCP client config:
 ```json
 {
   "mcpServers": {
-    "browser-mcp": {
+    "browser-mcp-x": {
       "command": "python3",
       "args": ["path/to/relay.py"]
     }
@@ -68,12 +68,7 @@ Chrome Extension (offscreen document)
 Browser Tab
 ```
 
-### License
-
-MIT — Open Source
-
 ---
 
 **Links:**
-- GitHub: https://github.com/quangngthanh/browser-mcp-stack
 - MCP Protocol: https://modelcontextprotocol.io

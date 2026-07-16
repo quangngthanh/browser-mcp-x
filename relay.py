@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # ═══════════════════════════════════════════════════════════
-# BrowserMCP Relay — Zero-dependency MCP bridge
+# Browser MCP X Relay — Zero-dependency MCP bridge
 # Run: python3 relay.py
 # Connects AI agents (Claude, Cursor, etc.) via stdio to
-# the BrowserMCP Chrome extension via WebSocket.
+# the Browser MCP X Chrome extension via WebSocket.
 #
 # No npm. No node. No pip. Just python3 (pre-installed on
 # macOS/Linux, tiny download on Windows).
@@ -162,7 +162,7 @@ pending_lock = threading.Lock()
 
 def handle_extension_connection(conn, addr):
     global extension_client
-    print(f"[BrowserMCP] Extension connected from {addr}", file=sys.stderr)
+    print(f"[Browser MCP X] Extension connected from {addr}", file=sys.stderr)
 
     # Send MCP initialize to verify connection
     init_msg = json.dumps({
@@ -186,7 +186,7 @@ def handle_extension_connection(conn, addr):
             )
             conn.sendall(response.encode())
     except Exception as e:
-        print(f"[BrowserMCP] Handshake error: {e}", file=sys.stderr)
+        print(f"[Browser MCP X] Handshake error: {e}", file=sys.stderr)
         conn.close()
         return
 
@@ -214,7 +214,7 @@ def handle_extension_connection(conn, addr):
             except Exception:
                 pass
 
-    print("[BrowserMCP] Extension disconnected", file=sys.stderr)
+    print("[Browser MCP X] Extension disconnected", file=sys.stderr)
     with extension_lock:
         if extension_client is client:
             extension_client = None
@@ -235,8 +235,8 @@ def try_bind_ws_server():
 
 
 def run_ws_server(server: socket.socket):
-    print(f"[BrowserMCP] WebSocket server listening on port {WS_PORT}", file=sys.stderr)
-    print(f"[BrowserMCP] Waiting for Chrome extension to connect...", file=sys.stderr)
+    print(f"[Browser MCP X] WebSocket server listening on port {WS_PORT}", file=sys.stderr)
+    print(f"[Browser MCP X] Waiting for Chrome extension to connect...", file=sys.stderr)
     while True:
         conn, addr = server.accept()
         threading.Thread(target=handle_extension_connection, args=(conn, addr), daemon=True).start()
@@ -311,7 +311,7 @@ def call_extension_sync(msg: dict, timeout: float = 30.0) -> dict:
     if not client:
         return {
             "jsonrpc": "2.0", "id": msg_id,
-            "error": {"code": -32000, "message": "Browser extension not connected. Open BrowserMCP and click Start."}
+            "error": {"code": -32000, "message": "Browser extension not connected. Open Browser MCP X and click Start."}
         }
 
     response_queue = queue.Queue(maxsize=1)
@@ -321,14 +321,14 @@ def call_extension_sync(msg: dict, timeout: float = 30.0) -> dict:
         if not client.send(json.dumps(msg)):
             return {
                 "jsonrpc": "2.0", "id": msg_id,
-                "error": {"code": -32001, "message": "Failed to send request to BrowserMCP extension."}
+                "error": {"code": -32001, "message": "Failed to send request to Browser MCP X extension."}
             }
         try:
             return response_queue.get(timeout=timeout)
         except queue.Empty:
             return {
                 "jsonrpc": "2.0", "id": msg_id,
-                "error": {"code": -32002, "message": f"Timeout waiting for BrowserMCP response after {timeout}s."}
+                "error": {"code": -32002, "message": f"Timeout waiting for Browser MCP X response after {timeout}s."}
             }
     finally:
         with pending_lock:
@@ -347,7 +347,7 @@ def handle_stdio_message(msg: dict):
 
     # Notifications have no id / no response
     if method == "notifications/initialized":
-        print("[BrowserMCP] Client initialized", file=sys.stderr)
+        print("[Browser MCP X] Client initialized", file=sys.stderr)
         return
 
     if method == "initialize":
@@ -358,7 +358,7 @@ def handle_stdio_message(msg: dict):
             "result": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "browser-mcp", "version": VERSION},
+                "serverInfo": {"name": "browser-mcp-x", "version": VERSION},
             },
         })
         return
@@ -378,14 +378,14 @@ def handle_stdio_message(msg: dict):
 
     if method == "tools/call":
         if not is_extension_connected():
-            print("[BrowserMCP] Waiting for Chrome extension...", file=sys.stderr)
+            print("[Browser MCP X] Waiting for Chrome extension...", file=sys.stderr)
             if not wait_for_extension(15.0):
                 send_stdio({
                     "jsonrpc": "2.0",
                     "id": msg_id,
                     "error": {
                         "code": -32000,
-                        "message": "Browser extension not connected. Install BrowserMCP, open it, and click Start.",
+                        "message": "Browser extension not connected. Install Browser MCP X, open it, and click Start.",
                     },
                 })
                 return
@@ -405,9 +405,9 @@ def handle_stdio_message(msg: dict):
 
 def handle_stdio():
     """Read MCP requests from stdin; handshake locally, tool calls via extension."""
-    print("[BrowserMCP] Relay ready. Connect your MCP client via stdio.", file=sys.stderr)
-    print(f"[BrowserMCP] WebSocket endpoint: ws://127.0.0.1:{WS_PORT}", file=sys.stderr)
-    print(f"[BrowserMCP] HTTP status endpoint: http://127.0.0.1:{MCP_PORT}", file=sys.stderr)
+    print("[Browser MCP X] Relay ready. Connect your MCP client via stdio.", file=sys.stderr)
+    print(f"[Browser MCP X] WebSocket endpoint: ws://127.0.0.1:{WS_PORT}", file=sys.stderr)
+    print(f"[Browser MCP X] HTTP status endpoint: http://127.0.0.1:{MCP_PORT}", file=sys.stderr)
 
     for line in sys.stdin:
         line = line.strip()
@@ -420,7 +420,7 @@ def handle_stdio():
         try:
             handle_stdio_message(msg)
         except Exception as e:
-            print(f"[BrowserMCP] Error handling message: {e}", file=sys.stderr)
+            print(f"[Browser MCP X] Error handling message: {e}", file=sys.stderr)
             if msg.get("id") is not None:
                 send_stdio({
                     "jsonrpc": "2.0",
@@ -450,7 +450,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             return
 
         status = {
-            "name": "browser-mcp",
+            "name": "browser-mcp-x",
             "version": VERSION,
             "extension_connected": bool(connected),
             "ws_port": WS_PORT,
@@ -541,7 +541,7 @@ def detect_running_relay() -> bool:
 def handle_stdio_proxy():
     """Proxy mode: relay.py already running — forward stdio MCP to its HTTP endpoint."""
     import urllib.request as _req
-    print(f"[BrowserMCP] Relay already running. Proxy mode → http://127.0.0.1:{MCP_PORT}/mcp", file=sys.stderr)
+    print(f"[Browser MCP X] Relay already running. Proxy mode → http://127.0.0.1:{MCP_PORT}/mcp", file=sys.stderr)
 
     for line in sys.stdin:
         line = line.strip()
@@ -564,7 +564,7 @@ def handle_stdio_proxy():
                 "result": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {"listChanged": False}},
-                    "serverInfo": {"name": "browser-mcp", "version": VERSION},
+                    "serverInfo": {"name": "browser-mcp-x", "version": VERSION},
                 },
             })
             continue
@@ -606,7 +606,7 @@ if __name__ == "__main__":
 
     print(f"""
 ╔══════════════════════════════════════════╗
-║       BrowserMCP Relay v{VERSION}            ║
+║       Browser MCP X Relay v{VERSION}            ║
 ║   Zero-dependency MCP bridge for Chrome   ║
 ╚══════════════════════════════════════════╝
 
@@ -614,7 +614,7 @@ if __name__ == "__main__":
   HTTP status: http://127.0.0.1:{MCP_PORT}  (health check)
   stdio: MCP requests from AI agent
 
-  1. Install the BrowserMCP Chrome extension
+  1. Install the Browser MCP X Chrome extension
   2. Click the extension icon → Start
   3. Configure your AI agent to use this relay
 
@@ -627,11 +627,11 @@ if __name__ == "__main__":
     try:
         handle_stdio()
     except (KeyboardInterrupt, SystemExit):
-        print("\n[BrowserMCP] Shutting down.", file=sys.stderr)
+        print("\n[Browser MCP X] Shutting down.", file=sys.stderr)
         sys.exit(0)
 
     # stdin EOF — keep HTTP/WebSocket servers alive
-    print("[BrowserMCP] stdio ended, keeping HTTP/WebSocket server alive...", file=sys.stderr)
+    print("[Browser MCP X] stdio ended, keeping HTTP/WebSocket server alive...", file=sys.stderr)
     import signal
     if hasattr(signal, "pause"):
         signal.pause()

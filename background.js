@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// BrowserMCP — Background Service Worker
+// Browser MCP X — Background Service Worker
 // Zero-setup MCP server running inside the extension
 // AI agents connect via WebSocket to localhost:9275
 // ═══════════════════════════════════════════════════════════
@@ -295,7 +295,7 @@ async function handleMcpRequest(message) {
           capabilities: {
             tools: { listChanged: false }
           },
-          serverInfo: { name: "browser-mcp", version: MCP_VERSION }
+          serverInfo: { name: "browser-mcp-x", version: MCP_VERSION }
         };
         break;
 
@@ -316,7 +316,7 @@ async function handleMcpRequest(message) {
 
     return { jsonrpc: "2.0", id, result };
   } catch (error) {
-    console.error(`[BrowserMCP] Error handling ${method}:`, error);
+    console.error(`[Browser MCP X] Error handling ${method}:`, error);
     return {
       jsonrpc: "2.0", id,
       error: { code: -32603, message: error.message || "Internal error" }
@@ -1477,7 +1477,7 @@ async function startServer() {
       chrome.runtime.sendMessage({ type: "START_MCP_SERVER", port: MCP_PORT });
     }, 100);
   } catch (e) {
-    console.error("[BrowserMCP] Failed to start:", e);
+    console.error("[Browser MCP X] Failed to start:", e);
     chrome.runtime.sendMessage({ type: "START_ERROR", error: e.message || String(e) });
   }
 }
@@ -1573,7 +1573,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   } else {
     await restoreAgentContext();
   }
-  console.log(`[BrowserMCP] Extension ${details.reason}. MCP server ready to start.`);
+  console.log(`[Browser MCP X] Extension ${details.reason}. MCP server ready to start.`);
 });
 
 // Restore running state when Chrome wakes/restarts the MV3 service worker.
@@ -1587,7 +1587,7 @@ chrome.runtime.onStartup.addListener(async () => {
 
 chrome.runtime.onSuspend.addListener(() => {
   // Do not stop the offscreen document here. It owns the persistent WebSocket.
-  console.log("[BrowserMCP] Service worker suspended; offscreen stays active.");
+  console.log("[Browser MCP X] Service worker suspended; offscreen stays active.");
 });
 
 // ─── Agent frame: soft gradient rim on tabs the agent has touched ───

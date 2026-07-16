@@ -1,10 +1,10 @@
-# Datenschutzerklärung — BrowserMCP
+# Datenschutzerklärung — Browser MCP X
 
 **Stand: Juli 2026**
 
 ## Zusammenfassung
 
-BrowserMCP verarbeitet **alle Daten ausschließlich lokal** auf Ihrem Rechner. Es werden **keine Daten an externe Server übertragen**, keine Telemetrie gesammelt und keine Analytics-Daten erzeugt.
+Browser MCP X verarbeitet **alle Daten ausschließlich lokal** auf Ihrem Rechner. Es werden **keine Daten an externe Server übertragen**, keine Telemetrie gesammelt und keine Analytics-Daten erzeugt.
 
 ## Datenerfassung
 
@@ -20,7 +20,7 @@ BrowserMCP verarbeitet **alle Daten ausschließlich lokal** auf Ihrem Rechner. E
 
 ### Was lokal verarbeitet wird
 
-Wenn Sie BrowserMCP verwenden, verarbeitet die Extension folgende Daten **ausschließlich lokal**:
+Wenn Sie Browser MCP X verwenden, verarbeitet die Extension folgende Daten **ausschließlich lokal**:
 
 1. **Browser-Tab-Informationen** — Titel, URL und Inhalt des aktiven Tabs werden an den verbundenen AI-Agenten übermittelt. Diese Übertragung erfolgt über `localhost` (127.0.0.1) und verlässt niemals Ihren Rechner.
 2. **WebSocket-Verbindung** — Die Kommunikation zwischen Extension und Relay-Script läuft über `ws://localhost:9274`. Diese Verbindung ist auf `127.0.0.1` beschränkt.
@@ -51,12 +51,8 @@ Die einzige Datenübertragung erfolgt zwischen:
 
 ## Drittanbieter
 
-BrowserMCP verwendet **keine Drittanbieter-Dienste**. Es werden keine SDKs für Analytics, Telemetrie oder Fehlerberichte eingebunden.
-
-## Open Source
-
-BrowserMCP ist Open Source (MIT-Lizenz). Der vollständige Quellcode ist unter https://github.com/quangngthanh/browser-mcp-stack einsehbar. Sie können jeden Aspekt der Datenverarbeitung selbst überprüfen.
+Browser MCP X verwendet **keine Drittanbieter-Dienste**. Es werden keine SDKs für Analytics, Telemetrie oder Fehlerberichte eingebunden.
 
 ## Kontakt
 
-Bei Fragen zum Datenschutz: https://github.com/quangngthanh/browser-mcp-stack/issues
+Bei Fragen zum Datenschutz kontaktieren Sie uns bitte über den Chrome Web Store Eintrag.

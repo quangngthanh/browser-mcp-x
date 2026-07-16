@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BrowserMCP — AI Browser Control</title>
+<title>Browser MCP X — AI Browser Control</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
@@ -13,12 +13,19 @@
     box-sizing: border-box;
   }
 
+  html {
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
   body {
     width: 320px;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
     color: #1e293b;
     padding: 16px;
+    border-radius: 16px;
+    overflow: hidden;
   }
 
   .header {
@@ -266,7 +273,7 @@
 <div class="header">
   <div class="logo-container">
     <span class="logo-icon">🌐</span>
-    <span class="logo-text">BrowserMCP</span>
+    <span class="logo-text">Browser MCP X</span>
   </div>
   <p class="subtitle">AI Browser Control</p>
 </div>
@@ -279,26 +286,12 @@
       <span id="statusText">Stopped</span>
     </span>
   </div>
-  <div class="status-item">
-    <span class="status-label">WebSocket</span>
-    <span class="status-value font-mono" id="wsStatus">—</span>
-  </div>
-
   <button class="btn btn-primary" id="startBtn">Start</button>
 </div>
 
-<details class="config-details">
-  <summary>Configuration</summary>
-  <div class="config-content">
-    <div class="config-label">Relay Command</div>
-    <div class="config-value" id="configText">python3 relay.py</div>
-    <div class="config-label">JSON Config (Claude / Cursor)</div>
-    <div class="config-value font-mono" id="jsonConfig">{ "mcpServers": { "browser-mcp": { "command": "python3", "args": ["relay.py"] } } }</div>
-  </div>
-</details>
 
 <div class="footer">
-  BrowserMCP · Zero-setup
+  Browser MCP X · Zero-setup
 </div>
 
 <script src="popup.js"></script>

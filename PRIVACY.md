@@ -2,13 +2,13 @@
 
 **Last updated: 2026-07-04**
 
-## What BrowserMCP collects
+## What Browser MCP X collects
 
-**Nothing.** BrowserMCP does not collect, store, or transmit personal data.
+**Nothing.** Browser MCP X does not collect, store, or transmit personal data.
 
-## What BrowserMCP does
+## What Browser MCP X does
 
-BrowserMCP is a local-only bridge between AI agents (Claude, Cursor, Hermes) and your Chrome browser.
+Browser MCP X is a local-only bridge between AI agents (Claude, Cursor, Hermes) and your Chrome browser.
 
 - **Tool calls** (navigate, click, type, screenshot) are processed locally
 - **The Python relay** binds to `127.0.0.1:9274` — not accessible from the internet
@@ -16,7 +16,7 @@ BrowserMCP is a local-only bridge between AI agents (Claude, Cursor, Hermes) and
 
 ## License validation
 
-If you purchase BrowserMCP Pro:
+If you purchase Browser MCP X Pro:
 
 - Your license key is sent to `api.lemonsqueezy.com` (HTTPS) for validation
 - The license key is stored in `chrome.storage.local` on your device
@@ -29,6 +29,3 @@ If you purchase BrowserMCP Pro:
 | LemonSqueezy API | License validation (Pro only) | License key only |
 | None else | — | — |
 
-## Open source
-
-BrowserMCP is open source (MIT). You can audit all code at [github.com/quangngthanh/browser-mcp-stack](https://github.com/quangngthanh/browser-mcp-stack).

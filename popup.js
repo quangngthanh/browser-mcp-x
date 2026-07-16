@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// BrowserMCP — Popup Script
+// Browser MCP X — Popup Script
 // ═══════════════════════════════════════════════════════════
 
 let isRunning = false;
@@ -85,7 +85,7 @@ function copyConfig() {
 function copyJson() {
   const config = JSON.stringify({
     mcpServers: {
-      "browser-mcp": {
+      "browser-mcp-x": {
         command: "python3",
         args: ["relay.py"]
       }

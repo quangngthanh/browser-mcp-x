@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-// BrowserMCP — Offscreen Document
+// Browser MCP X — Offscreen Document
 // Connects TO the relay (relay.py) via WebSocket as a client
 // Relay runs at ws://localhost:9274
 // ═══════════════════════════════════════════════════════════
@@ -33,7 +33,7 @@ function connectToRelay() {
     ws = new WebSocket(RELAY_WS_URL);
 
     ws.onopen = () => {
-      console.log("[BrowserMCP] Connected to relay");
+      console.log("[Browser MCP X] Connected to relay");
       connected = true;
       chrome.runtime.sendMessage({ type: "CLIENT_CONNECTED", clientId: "extension" });
     };
@@ -44,7 +44,7 @@ function connectToRelay() {
         // Forward MCP request to background script
         chrome.runtime.sendMessage({ type: "MCP_REQUEST", data: msg }, (response) => {
           if (chrome.runtime.lastError) {
-            console.error("[BrowserMCP] sendMessage callback error:", chrome.runtime.lastError.message);
+            console.error("[Browser MCP X] sendMessage callback error:", chrome.runtime.lastError.message);
             return;
           }
           if (response && ws && ws.readyState === WebSocket.OPEN) {
@@ -52,12 +52,12 @@ function connectToRelay() {
           }
         });
       } catch (e) {
-        console.error("[BrowserMCP] Parse error:", e);
+        console.error("[Browser MCP X] Parse error:", e);
       }
     };
 
     ws.onclose = () => {
-      console.log("[BrowserMCP] Disconnected from relay. Reconnecting in 2s...");
+      console.log("[Browser MCP X] Disconnected from relay. Reconnecting in 2s...");
       connected = false;
       chrome.runtime.sendMessage({ type: "CLIENT_DISCONNECTED", clientId: "extension" });
       // Auto-reconnect with exponential backoff
@@ -75,10 +75,10 @@ function connectToRelay() {
     };
 
     ws.onerror = (err) => {
-      console.error("[BrowserMCP] WS error:", err);
+      console.error("[Browser MCP X] WS error:", err);
     };
   } catch (e) {
-    console.error("[BrowserMCP] Connection failed:", e);
+    console.error("[Browser MCP X] Connection failed:", e);
     setTimeout(connectToRelay, 3000);
   }
 }

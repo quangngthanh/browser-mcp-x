@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stdio MCP server that bridges to the BrowserMCP Chrome extension HTTP relay."""
+"""Stdio MCP server that bridges to the Browser MCP X Chrome extension HTTP relay."""
 import json
 import sys
 import urllib.request
@@ -34,7 +34,7 @@ def call_relay(method: str, params: dict | None = None, msg_id=None) -> dict:
         with urllib.request.urlopen(req, timeout=60.0) as resp:
             return json.loads(resp.read().decode())
     except urllib.error.URLError as e:
-        return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32000, "message": f"Cannot reach BrowserMCP relay at {RELAY_URL}: {e}"}}
+        return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32000, "message": f"Cannot reach Browser MCP X relay at {RELAY_URL}: {e}"}}
     except Exception as e:
         return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32001, "message": str(e)}}
 
@@ -46,7 +46,7 @@ def handle_initialize(msg_id):
         "result": {
             "protocolVersion": "2024-11-05",
             "capabilities": {"tools": {}, "logging": {}},
-            "serverInfo": {"name": "browsermcp-mcp-server", "version": "0.4.0"},
+            "serverInfo": {"name": "browser-mcp-x-server", "version": "0.4.0"},
         }
     }
 

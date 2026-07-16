@@ -1,4 +1,4 @@
-# BrowserMCP — AI Browser Control via MCP
+# Browser MCP X — AI Browser Control via MCP
 
 > Turn Chrome into an MCP server. Let AI agents control your browser. Zero setup. 37 tools. No npm. No dependencies.
 
@@ -7,9 +7,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/licenses/MIT)
 [![Tools: 37](https://img.shields.io/badge/MCP_Tools-37-blue)]()
 
-## Why BrowserMCP?
+## Why Browser MCP X?
 
-| | BrowserMCP | mcp-chrome (12k★) | Playwright MCP |
+| | Browser MCP X | mcp-chrome (12k★) | Playwright MCP |
 |---|---|---|---|
 | **Setup** | 1 click + `python3 relay.py` | `npm install -g` + extension | `npm install playwright` + browser |
 | **Dependencies** | Python 3 (pre-installed) | Node.js + npm | Node.js + Playwright + browser binaries |
@@ -47,7 +47,7 @@ Add to your MCP config:
 ```json
 {
   "mcpServers": {
-    "browser-mcp": {
+    "browser-mcp-x": {
       "command": "python3",
       "args": ["path/to/relay.py"]
     }
@@ -58,12 +58,12 @@ Add to your MCP config:
 #### Hermes Agent
 
 ```bash
-hermes mcp add browser-mcp --command "python3 /path/to/relay.py"
+hermes mcp add browser-mcp-x --command "python3 /path/to/relay.py"
 ```
 
 ### 4. Start the Extension
 
-Click the BrowserMCP extension icon → **Start**
+Click the Browser MCP X extension icon → **Start**
 
 ## 37 MCP Tools
 
@@ -139,8 +139,8 @@ Browser Tab
 
 MIT — Open Source
 
+Forked from [Tabtii/browser-mcp](https://github.com/Tabtii/browser-mcp), with additional stability fixes and tooling changes.
+
 ## Links
 
-- **GitHub:** https://github.com/quangngthanh/browser-mcp-stack
 - **MCP Protocol:** https://modelcontextprotocol.io
-- **Report Issues:** https://github.com/quangngthanh/browser-mcp-stack/issues
