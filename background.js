@@ -1716,14 +1716,15 @@ function injectAgentFrame() {
         ctx.fillStyle = "#e8e8e8";
         ctx.fillRect(0, 0, size, size);
       }
-      const r = size * 0.16;
-      const cx = size - r - 2;
-      const cy = size - r - 2;
+      const r = size * 0.32;
+      const cx = size - r - 1;
+      const cy = size - r - 1;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = "#52B788";
+      // Bright mint — more visible on the tab strip than the page-rim green
+      ctx.fillStyle = "#E835CA";
       ctx.fill();
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 2;
       ctx.strokeStyle = "#ffffff";
       ctx.stroke();
 
