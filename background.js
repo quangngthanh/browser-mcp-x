@@ -333,7 +333,7 @@ async function captureWithDebugger(tabId) {
   try {
     return await Promise.race([
       capture(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Debugger screenshot timed out after 20s")), 20000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Debugger screenshot timed out after 25s")), 25000))
     ]);
   } finally {
     // Fire-and-forget: do NOT await detach — if the session is stuck,
