@@ -11,25 +11,6 @@ let ws = null;
 const RELAY_WS_URL = "ws://127.0.0.1:9274";
 let connected = false;
 
-async function captureWithDebugger(tabId) {
-  const target = { tabId };
-  let attached = false;
-  const capture = async () => {
-    await chrome.debugger.attach(target, "1.3");
-    attached = true;
-    const result = await chrome.debugger.sendCommand(target, "Page.captureScreenshot", { format: "png" });
-    return `data:image/png;base64,${result.data}`;
-  };
-  try {
-    return await Promise.race([
-      capture(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Debugger screenshot timed out after 25s")), 25000))
-    ]);
-  } finally {
-    if (attached) chrome.debugger.detach(target).catch(() => {});
-  }
-}
-
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "START_MCP_SERVER") {
     connectToRelay();
@@ -42,13 +23,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     connected = false;
     sendResponse({ ok: true });
     return false;
-  }
-
-  if (msg.type === "TAKE_SCREENSHOT") {
-    captureWithDebugger(msg.tabId)
-      .then(dataUrl => sendResponse({ ok: true, dataUrl }))
-      .catch(e => sendResponse({ ok: false, error: e.message }));
-    return true; // async
   }
 });
 
@@ -69,6 +43,10 @@ function connectToRelay() {
         const msg = JSON.parse(event.data);
         // Forward MCP request to background script
         chrome.runtime.sendMessage({ type: "MCP_REQUEST", data: msg }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.error("[BrowserMCP] sendMessage callback error:", chrome.runtime.lastError.message);
+            return;
+          }
           if (response && ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify(response));
           }

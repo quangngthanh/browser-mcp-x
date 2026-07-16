@@ -21,7 +21,13 @@ const MCP_TOOLS = [
   {
     name: "screenshot",
     description: "Take a screenshot of the active tab",
-    inputSchema: { type: "object", properties: { fullPage: { type: "boolean", default: false } } }
+    inputSchema: {
+      type: "object",
+      properties: {
+        format: { type: "string", enum: ["jpeg", "png"], default: "jpeg" },
+        quality: { type: "number", description: "JPEG quality 0-100 (ignored for png)", default: 75 }
+      }
+    }
   },
   {
     name: "get_dom",
@@ -320,21 +326,38 @@ async function handleMcpRequest(message) {
 
 
 // ─── Debugger-based screenshot ───
-async function captureWithDebugger(tabId) {
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms))
+  ]);
+}
+
+async function captureWithDebugger(tabId, format = "jpeg", quality = 75) {
   const target = { tabId };
   let attached = false;
-  const capture = async () => {
-    await chrome.debugger.attach(target, "1.3");
-    attached = true;
-    const result = await chrome.debugger.sendCommand(target, "Page.captureScreenshot", { format: "png" });
-    return `data:image/png;base64,${result.data}`;
-  };
+
+  // A previous call that hit the outer Promise.race timeout may have left its
+  // own attach() still pending in the background — the debugger API then
+  // refuses new attach() calls for this tab ("Another debugger is already
+  // attached") or hangs waiting on the stale session's internal lock.
+  // Clear any such zombie session before attaching a fresh one.
+  await chrome.debugger.detach(target).catch(() => {});
+
   try {
-    return await Promise.race([
-      capture(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Debugger screenshot timed out after 25s")), 25000))
-    ]);
+    await withTimeout(chrome.debugger.attach(target, "1.3"), 5000, "debugger.attach");
+    attached = true;
+
+    const params = format === "png" ? { format: "png" } : { format: "jpeg", quality };
+    const result = await withTimeout(
+      chrome.debugger.sendCommand(target, "Page.captureScreenshot", params),
+      15000,
+      "Page.captureScreenshot"
+    );
+    return `data:image/${format};base64,${result.data}`;
   } finally {
+    // Fire-and-forget: do NOT await detach — if the session is stuck,
+    // awaiting detach would hang the finally block and the caller never returns.
     if (attached) chrome.debugger.detach(target).catch(() => {});
   }
 }
@@ -358,12 +381,14 @@ async function executeTool(toolName, args) {
     }
 
     case "screenshot": {
+      const format = args.format === "png" ? "png" : "jpeg";
+      const quality = typeof args.quality === "number" ? args.quality : 75;
       try {
-        const dataUrl = await captureWithDebugger(tab.id);
+        const dataUrl = await captureWithDebugger(tab.id, format, quality);
         return {
           content: [
             { type: "text", text: "Screenshot captured" },
-            { type: "image", data: dataUrl.split(",")[1], mimeType: "image/png" }
+            { type: "image", data: dataUrl.split(",")[1], mimeType: `image/${format}` }
           ]
         };
       } catch (e) {
@@ -900,8 +925,8 @@ async function executeTool(toolName, args) {
 
     case "get_console_logs": {
       const level = args.level || "all";
-      // Use chrome.debugger to capture console logs
-      // For simplicity, we inject a script that captures console output
+      // Injects a script that wraps console.log/warn/error to record output;
+      // does not use chrome.debugger.
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: (lvl) => {
@@ -927,8 +952,8 @@ async function executeTool(toolName, args) {
 
     case "get_network_requests": {
       const filterStr = args.filter || "";
-      // Use the debugger API to capture network requests
-      // For a lightweight approach, we use Performance API
+      // Reads recorded resource timing entries via the Performance API;
+      // does not use chrome.debugger.
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: (filterStr) => {
