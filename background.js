@@ -45,8 +45,8 @@ const MCP_TOOLS = [
   },
   {
     name: "scroll",
-    description: "Scroll the page by a given amount",
-    inputSchema: { type: "object", properties: { direction: { type: "string", enum: ["up", "down"], default: "down" }, amount: { type: "number", default: 500 } } }
+    description: "Scroll the page or a specific element (e.g. a dialog overlay) by a given amount",
+    inputSchema: { type: "object", properties: { direction: { type: "string", enum: ["up", "down"], default: "down" }, amount: { type: "number", default: 500 }, selector: { type: "string", description: "CSS selector of the scrollable container; omit to scroll the page" } } }
   },
   {
     name: "get_tabs",
@@ -558,10 +558,16 @@ async function executeTool(toolName, args) {
     case "scroll": {
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        func: (dir, amt) => {
-          window.scrollBy({ top: dir === "up" ? -amt : amt, behavior: "smooth" });
+        func: (dir, amt, sel) => {
+          const el = sel ? document.querySelector(sel) : null;
+          const delta = dir === "up" ? -amt : amt;
+          if (el) {
+            el.scrollTop += delta;
+          } else {
+            window.scrollBy({ top: delta, behavior: "smooth" });
+          }
         },
-        args: [args.direction || "down", args.amount || 500]
+        args: [args.direction || "down", args.amount || 500, args.selector || null]
       });
       return { content: [{ type: "text", text: `Scrolled ${args.direction || "down"} by ${args.amount || 500}px` }] };
     }
