@@ -318,29 +318,6 @@ async function handleMcpRequest(message) {
   }
 }
 
-// ─── Debugger-based screenshot (works when window is minimized / GPU readback fails) ───
-async function captureWithDebugger(tabId) {
-  const target = { tabId };
-  let attached = false;
-
-  const capture = async () => {
-    await chrome.debugger.attach(target, "1.3");
-    attached = true;
-    const result = await chrome.debugger.sendCommand(target, "Page.captureScreenshot", { format: "png" });
-    return `data:image/png;base64,${result.data}`;
-  };
-
-  try {
-    return await Promise.race([
-      capture(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Debugger screenshot timed out after 25s")), 25000))
-    ]);
-  } finally {
-    // Fire-and-forget: do NOT await detach — if the session is stuck,
-    // awaiting detach would hang the finally block and the caller never returns.
-    if (attached) chrome.debugger.detach(target).catch(() => {});
-  }
-}
 
 // ─── Tool Execution ───
 async function executeTool(toolName, args) {
@@ -362,9 +339,19 @@ async function executeTool(toolName, args) {
 
     case "screenshot": {
       try {
-        // Use Chrome DevTools Protocol directly — compositor-independent and
-        // works regardless of window focus or GPU state on heavy pages.
-        const dataUrl = await captureWithDebugger(tab.id);
+        // Delegate to offscreen document — persistent JS context where setTimeout
+        // fires reliably even on heavy pages (unlike MV3 service worker).
+        await ensureOffscreenDocument();
+        const dataUrl = await Promise.race([
+          new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({ type: "TAKE_SCREENSHOT", tabId: tab.id }, (resp) => {
+              if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+              else if (resp?.ok) resolve(resp.dataUrl);
+              else reject(new Error(resp?.error || "Screenshot failed"));
+            });
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Screenshot timed out after 28s")), 28000))
+        ]);
         return {
           content: [
             { type: "text", text: "Screenshot captured" },
