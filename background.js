@@ -333,7 +333,7 @@ async function captureWithDebugger(tabId) {
   try {
     return await Promise.race([
       capture(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Debugger screenshot timed out after 8s")), 8000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Debugger screenshot timed out after 20s")), 20000))
     ]);
   } finally {
     if (attached) await chrome.debugger.detach(target).catch(() => {});

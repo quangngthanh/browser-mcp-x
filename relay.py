@@ -476,7 +476,8 @@ class StatusHandler(BaseHTTPRequestHandler):
             }).encode())
             return
 
-        timeout = 30.0 if msg.get("method") == "tools/call" else 30.0
+        tool_name = (msg.get("params") or {}).get("name", "")
+        timeout = 40.0 if tool_name == "screenshot" else 30.0
         response = call_extension_sync(msg, timeout=timeout)
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
