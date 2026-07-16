@@ -322,14 +322,19 @@ async function handleMcpRequest(message) {
 async function captureWithDebugger(tabId) {
   const target = { tabId };
   let attached = false;
-  try {
+
+  const capture = async () => {
     await chrome.debugger.attach(target, "1.3");
     attached = true;
-    const result = await Promise.race([
-      chrome.debugger.sendCommand(target, "Page.captureScreenshot", { format: "png" }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Debugger screenshot timed out after 10s")), 10000))
-    ]);
+    const result = await chrome.debugger.sendCommand(target, "Page.captureScreenshot", { format: "png" });
     return `data:image/png;base64,${result.data}`;
+  };
+
+  try {
+    return await Promise.race([
+      capture(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Debugger screenshot timed out after 8s")), 8000))
+    ]);
   } finally {
     if (attached) await chrome.debugger.detach(target).catch(() => {});
   }
