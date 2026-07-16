@@ -1683,59 +1683,81 @@ function injectAgentFrame() {
     document.documentElement.appendChild(frame);
   }
 
-  applyAgentFaviconBadge();
+  ensureAgentFaviconBadgeWatcher();
 
-  function applyAgentFaviconBadge() {
+  function ensureAgentFaviconBadgeWatcher() {
     const root = document.documentElement;
-    if (root.dataset.browserMcpFaviconBadged === "1" &&
-        !document.getElementById("browser-mcp-agent-favicon")) {
-      delete root.dataset.browserMcpFaviconBadged;
-    }
-    if (root.dataset.browserMcpFaviconBadged === "1" &&
-        document.getElementById("browser-mcp-agent-favicon")) {
-      return;
-    }
+    if (root.__browserMcpFaviconObserver) return;
 
+    ensureAgentFaviconBadge();
+
+    const observer = new MutationObserver(() => {
+      const managed = document.getElementById("browser-mcp-agent-favicon");
+      const icons = document.querySelectorAll(
+        "link[rel~='icon'], link[rel='shortcut icon']"
+      );
+      const lastIcon = icons.length ? icons[icons.length - 1] : null;
+      if (!managed || lastIcon !== managed) {
+        ensureAgentFaviconBadge();
+      }
+    });
+
+    if (document.head) {
+      observer.observe(document.head, {
+        childList: true,
+        attributes: true,
+        subtree: true
+      });
+      root.__browserMcpFaviconObserver = observer;
+    }
+  }
+
+  function ensureAgentFaviconBadge() {
+    const root = document.documentElement;
     const existingIcon = document.querySelector(
       "link[rel~='icon'], link[rel='shortcut icon']"
     );
     const originalHref =
       root.dataset.browserMcpOriginalFavicon ||
-      existingIcon?.href ||
+      (existingIcon?.id === "browser-mcp-agent-favicon"
+        ? null
+        : existingIcon?.href) ||
       new URL("/favicon.ico", location.href).href;
-    root.dataset.browserMcpOriginalFavicon = originalHref;
+    if (originalHref) {
+      root.dataset.browserMcpOriginalFavicon = originalHref;
+    }
 
     const size = 32;
     const canvas = document.createElement("canvas");
     canvas.width = size;
     canvas.height = size;
-    const ctx = canvas.getContext("2d");
 
-    const finish = (drewBase) => {
+    const paintBadge = (drewBase) => {
+      const c = canvas.getContext("2d");
+      c.clearRect(0, 0, size, size);
       if (!drewBase) {
-        ctx.fillStyle = "#e8e8e8";
-        ctx.fillRect(0, 0, size, size);
+        c.fillStyle = "#e8e8e8";
+        c.fillRect(0, 0, size, size);
       }
       const r = size * 0.32;
       const cx = size - r - 1;
       const cy = size - r - 1;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      // Bright mint — more visible on the tab strip than the page-rim green
-      ctx.fillStyle = "#E835CA";
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "#ffffff";
-      ctx.stroke();
+      c.beginPath();
+      c.arc(cx, cy, r, 0, Math.PI * 2);
+      c.fillStyle = "#4E26EE";
+      c.fill();
+      c.lineWidth = 2;
+      c.strokeStyle = "#ffffff";
+      c.stroke();
 
       let link = document.getElementById("browser-mcp-agent-favicon");
       if (!link) {
         link = document.createElement("link");
         link.id = "browser-mcp-agent-favicon";
         link.rel = "icon";
-        document.head.appendChild(link);
       }
       link.href = canvas.toDataURL("image/png");
+      document.head.appendChild(link);
       root.dataset.browserMcpFaviconBadged = "1";
     };
 
@@ -1747,21 +1769,26 @@ function injectAgentFrame() {
       settled = true;
       try {
         if (ok) {
-          ctx.clearRect(0, 0, size, size);
-          ctx.drawImage(img, 0, 0, size, size);
-          finish(true);
+          const c = canvas.getContext("2d");
+          c.clearRect(0, 0, size, size);
+          c.drawImage(img, 0, 0, size, size);
+          paintBadge(true);
         } else {
-          finish(false);
+          paintBadge(false);
         }
       } catch (_) {
-        finish(false);
+        try {
+          paintBadge(false);
+        } catch (e) {
+          // Ignore restricted pages
+        }
       }
     };
     img.onload = () => done(true);
     img.onerror = () => done(false);
     try {
       img.crossOrigin = "anonymous";
-      img.src = originalHref;
+      img.src = originalHref || new URL("/favicon.ico", location.href).href;
     } catch (_) {
       done(false);
     }
@@ -1776,6 +1803,8 @@ function removeAgentFrame() {
   document.getElementById("browser-mcp-badge-styles")?.remove();
 
   const root = document.documentElement;
+  root.__browserMcpFaviconObserver?.disconnect();
+  delete root.__browserMcpFaviconObserver;
   const managed = document.getElementById("browser-mcp-agent-favicon");
   const original = root.dataset.browserMcpOriginalFavicon;
   managed?.remove();
