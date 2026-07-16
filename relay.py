@@ -24,7 +24,150 @@ from socketserver import ThreadingMixIn
 
 MCP_PORT = 9275
 WS_PORT = 9274  # WebSocket port for extension connection
+CDP_PORT = 9222  # Chrome remote debugging port
 VERSION = "0.4.0"
+
+# Last known URL of the agent-controlled tab (updated from navigate/get_page_info responses)
+current_agent_url = None
+current_agent_url_lock = threading.Lock()
+
+
+def cdp_screenshot(url_hint=None, port=CDP_PORT, timeout=25.0):
+    """Take a screenshot directly via Chrome remote debugging protocol.
+
+    Requires Chrome to be launched with --remote-debugging-port=<port>.
+    Returns base64-encoded PNG string.
+    """
+    import urllib.request as _req
+
+    # 1. Discover debuggable page targets
+    try:
+        resp = _req.urlopen(f"http://127.0.0.1:{port}/json/list", timeout=5)
+        targets = json.loads(resp.read())
+    except Exception as e:
+        raise ConnectionError(f"Chrome remote debugging unavailable on port {port}: {e}")
+
+    pages = [t for t in targets
+             if t.get("type") == "page"
+             and not t.get("url", "").startswith("chrome")
+             and not t.get("url", "").startswith("about:")]
+
+    if not pages:
+        raise ValueError("No debuggable page targets found in Chrome")
+
+    # Prefer the tab whose URL matches the agent's last known URL
+    target = pages[0]
+    if url_hint:
+        for t in pages:
+            if t.get("url", "").rstrip("/") == url_hint.rstrip("/"):
+                target = t
+                break
+
+    ws_url = target.get("webSocketDebuggerUrl")
+    if not ws_url:
+        raise ValueError(f"No WebSocket debugger URL for tab: {target.get('url')}")
+
+    # 2. Connect as WebSocket CLIENT (frames must be masked, per RFC 6455)
+    import urllib.parse
+    parsed = urllib.parse.urlparse(ws_url)
+    host = parsed.hostname
+    port_num = parsed.port or 80
+    path = parsed.path + (f"?{parsed.query}" if parsed.query else "")
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(10)
+    try:
+        sock.connect((host, port_num))
+
+        # HTTP upgrade handshake
+        ws_key = base64.b64encode(os.urandom(16)).decode()
+        sock.sendall((
+            f"GET {path} HTTP/1.1\r\n"
+            f"Host: {host}:{port_num}\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {ws_key}\r\n"
+            "Sec-WebSocket-Version: 13\r\n\r\n"
+        ).encode())
+
+        hs = b""
+        while b"\r\n\r\n" not in hs:
+            chunk = sock.recv(4096)
+            if not chunk:
+                raise ConnectionError("Connection closed during WebSocket handshake")
+            hs += chunk
+        if b"101" not in hs:
+            raise ConnectionError("WebSocket upgrade rejected by Chrome")
+
+        # 3. Send masked CDP command (client → server MUST be masked)
+        def send_masked(text):
+            payload = text.encode("utf-8")
+            mask_key = os.urandom(4)
+            masked = bytearray(b ^ mask_key[i % 4] for i, b in enumerate(payload))
+            n = len(payload)
+            hdr = b"\x81"
+            if n < 126:
+                hdr += bytes([0x80 | n])
+            elif n < 65536:
+                hdr += bytes([0x80 | 126]) + struct.pack(">H", n)
+            else:
+                hdr += bytes([0x80 | 127]) + struct.pack(">Q", n)
+            sock.sendall(hdr + mask_key + bytes(masked))
+
+        send_masked(json.dumps({
+            "id": 1,
+            "method": "Page.captureScreenshot",
+            "params": {"format": "png"}
+        }))
+
+        # 4. Read server frames (NOT masked) until we get the screenshot response
+        buf = b""
+        deadline = time.time() + timeout
+
+        def read_bytes_cdp(n):
+            nonlocal buf
+            while len(buf) < n:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    raise TimeoutError("CDP screenshot timed out")
+                sock.settimeout(min(remaining, 5.0))
+                chunk = sock.recv(65536)
+                if not chunk:
+                    raise ConnectionError("CDP connection closed")
+                buf += chunk
+            data, buf = buf[:n], buf[n:]
+            return data
+
+        while True:
+            hdr = read_bytes_cdp(2)
+            opcode = hdr[0] & 0x0F
+            is_masked = (hdr[1] & 0x80) != 0
+            length = hdr[1] & 0x7F
+            if length == 126:
+                length = struct.unpack(">H", read_bytes_cdp(2))[0]
+            elif length == 127:
+                length = struct.unpack(">Q", read_bytes_cdp(8))[0]
+            mask_key = read_bytes_cdp(4) if is_masked else b""
+            payload = bytearray(read_bytes_cdp(length))
+            if is_masked:
+                for i in range(len(payload)):
+                    payload[i] ^= mask_key[i % 4]
+
+            if opcode == 0x8:  # close
+                raise ConnectionError("CDP WebSocket closed by Chrome")
+            if opcode in (0x1, 0x0):  # text / continuation
+                msg = json.loads(payload.decode("utf-8"))
+                if msg.get("id") == 1:
+                    if "result" in msg and "data" in msg["result"]:
+                        return msg["result"]["data"]  # base64 PNG
+                    if "error" in msg:
+                        raise ValueError(f"CDP error: {msg['error']}")
+            # skip ping/pong/events and read the next frame
+    finally:
+        try:
+            sock.close()
+        except Exception:
+            pass
 
 # ─── WebSocket Server (hand-rolled, zero deps) ───
 
@@ -184,6 +327,8 @@ def handle_extension_connection(conn, addr):
                     with pending_lock:
                         pending = pending_responses.get(msg_id)
                     if pending:
+                        # Track agent URL from navigate / get_page_info responses
+                        _track_agent_url(parsed)
                         pending.put(parsed)
                         continue
                 sys.stdout.write(json.dumps(parsed) + "\n")
@@ -253,6 +398,32 @@ STATIC_TOOLS = [
     {"name": "snapshot", "description": "Capture ARIA accessibility tree of current page", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "select_option", "description": "Select option in a <select> dropdown by value, text, or index", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string"}, "value": {"type": "string"}, "text": {"type": "string"}, "index": {"type": "number"}}, "required": ["selector"]}},
 ]
+
+
+def _track_agent_url(response: dict):
+    """Extract and store the current agent tab URL from tool responses."""
+    global current_agent_url
+    try:
+        content = (response.get("result") or {}).get("content") or []
+        for item in content:
+            text = item.get("text", "")
+            # navigate response: "Navigated to <url>"
+            if text.startswith("Navigated to "):
+                url = text[len("Navigated to "):]
+                with current_agent_url_lock:
+                    current_agent_url = url
+                return
+            # get_page_info response: JSON with "url" key
+            try:
+                data = json.loads(text)
+                if isinstance(data, dict) and "url" in data:
+                    with current_agent_url_lock:
+                        current_agent_url = data["url"]
+                    return
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def is_extension_connected() -> bool:
@@ -475,6 +646,32 @@ class StatusHandler(BaseHTTPRequestHandler):
                 "error": {"code": -32700, "message": f"Invalid JSON body: {e}"}
             }).encode())
             return
+
+        # Screenshot: try direct CDP first (bypasses extension + service worker)
+        tool_name = (msg.get("params") or {}).get("name", "")
+        if tool_name == "screenshot":
+            try:
+                with current_agent_url_lock:
+                    url_hint = current_agent_url
+                image_data = cdp_screenshot(url_hint=url_hint, timeout=25.0)
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": msg.get("id"),
+                    "result": {
+                        "content": [
+                            {"type": "text", "text": "Screenshot captured"},
+                            {"type": "image", "data": image_data, "mimeType": "image/png"}
+                        ]
+                    }
+                }
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps(response).encode())
+                return
+            except Exception:
+                pass  # CDP unavailable — fall through to extension
 
         response = call_extension_sync(msg, timeout=30.0)
         self.send_response(200)
