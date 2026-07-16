@@ -336,7 +336,9 @@ async function captureWithDebugger(tabId) {
       new Promise((_, reject) => setTimeout(() => reject(new Error("Debugger screenshot timed out after 20s")), 20000))
     ]);
   } finally {
-    if (attached) await chrome.debugger.detach(target).catch(() => {});
+    // Fire-and-forget: do NOT await detach — if the session is stuck,
+    // awaiting detach would hang the finally block and the caller never returns.
+    if (attached) chrome.debugger.detach(target).catch(() => {});
   }
 }
 
@@ -359,41 +361,10 @@ async function executeTool(toolName, args) {
     }
 
     case "screenshot": {
-      const timeoutMs = 5000;
       try {
-        // Remember which tab the user is viewing so we can restore it after capture
-        const [userTab] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
-        const needsSwitch = !userTab || userTab.id !== tab.id;
-
-        if (needsSwitch) {
-          await chrome.tabs.update(tab.id, { active: true });
-        }
-        if (chrome.windows?.update) {
-          try {
-            await chrome.windows.update(tab.windowId, { focused: true, state: "normal" });
-          } catch (e) {}
-        }
-        await new Promise(r => setTimeout(r, 350));
-
-        // Try captureVisibleTab first (fast path, no DevTools banner).
-        // On heavy pages the GPU compositor can block the service worker event
-        // loop so setTimeout never fires — use a 1s race; if it misses, fall
-        // straight through to the debugger path which is compositor-independent.
-        let dataUrl;
-        try {
-          dataUrl = await Promise.race([
-            chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("fast-path timeout")), 1000))
-          ]);
-        } catch (_) {
-          dataUrl = await captureWithDebugger(tab.id);
-        }
-
-        // Restore user's tab so the switch is barely noticeable
-        if (needsSwitch && userTab) {
-          await chrome.tabs.update(userTab.id, { active: true }).catch(() => {});
-        }
-
+        // Use Chrome DevTools Protocol directly — compositor-independent and
+        // works regardless of window focus or GPU state on heavy pages.
+        const dataUrl = await captureWithDebugger(tab.id);
         return {
           content: [
             { type: "text", text: "Screenshot captured" },
