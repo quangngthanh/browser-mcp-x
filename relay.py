@@ -73,6 +73,18 @@ class ExtensionClient:
         self.conn = conn
         self.addr = addr
         self.alive = True
+        self._buf = b""
+
+    def _read_bytes(self, n: int) -> bytes:
+        """Read exactly n bytes, accumulating across TCP packets."""
+        while len(self._buf) < n:
+            chunk = self.conn.recv(65536)
+            if not chunk:
+                self.alive = False
+                raise ConnectionError("Connection closed")
+            self._buf += chunk
+        data, self._buf = self._buf[:n], self._buf[n:]
+        return data
 
     def send(self, data: str) -> bool:
         try:
@@ -84,11 +96,28 @@ class ExtensionClient:
 
     def recv(self) -> str:
         try:
-            data = self.conn.recv(65536)
-            if not data:
+            header = self._read_bytes(2)
+            opcode = header[0] & 0x0F
+            masked = (header[1] & 0x80) != 0
+            payload_len = header[1] & 0x7F
+
+            if payload_len == 126:
+                payload_len = struct.unpack(">H", self._read_bytes(2))[0]
+            elif payload_len == 127:
+                payload_len = struct.unpack(">Q", self._read_bytes(8))[0]
+
+            mask_key = self._read_bytes(4) if masked else b""
+            payload = bytearray(self._read_bytes(payload_len))
+
+            if masked:
+                for i in range(len(payload)):
+                    payload[i] ^= mask_key[i % 4]
+
+            if opcode == 0x8:  # close frame
                 self.alive = False
                 return ""
-            return WebSocketFrame.decode(data)
+
+            return payload.decode("utf-8")
         except Exception:
             self.alive = False
             return ""
