@@ -375,17 +375,17 @@ async function executeTool(toolName, args) {
         }
         await new Promise(r => setTimeout(r, 350));
 
+        // Try captureVisibleTab first (fast path, no DevTools banner).
+        // On heavy pages the GPU compositor can block the service worker event
+        // loop so setTimeout never fires — use a 1s race; if it misses, fall
+        // straight through to the debugger path which is compositor-independent.
         let dataUrl;
         try {
           dataUrl = await Promise.race([
             chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error(
-              `captureVisibleTab timed out after ${timeoutMs}ms`
-            )), timeoutMs))
+            new Promise((_, reject) => setTimeout(() => reject(new Error("fast-path timeout")), 1000))
           ]);
         } catch (_) {
-          // captureVisibleTab failed (GPU readback error or timeout) — fall back to
-          // Chrome DevTools Protocol which captures directly from the compositor
           dataUrl = await captureWithDebugger(tab.id);
         }
 
