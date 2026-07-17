@@ -57,7 +57,7 @@ function updateUI(status) {
     }
     if (ws) {
       ws.textContent = "ws://localhost:9274";
-      ws.style.color = "#d97706"; // amber-600 (more readable on light background)
+      ws.style.color = "#f472b6"; // neon pink
     }
   } else {
     if (btn) {
@@ -72,42 +72,9 @@ function updateUI(status) {
     }
     if (ws) {
       ws.textContent = "—";
-      ws.style.color = "#64748b"; // slate-500
+      ws.style.color = "#a291b5"; // lavender/slate-purple
     }
   }
-}
-
-function copyConfig() {
-  navigator.clipboard.writeText("python3 relay.py");
-  flashCopied("configText");
-}
-
-function copyJson() {
-  const config = JSON.stringify({
-    mcpServers: {
-      "browser-mcp-x": {
-        command: "python3",
-        args: ["relay.py"]
-      }
-    }
-  }, null, 2);
-  navigator.clipboard.writeText(config);
-  flashCopied("jsonConfig");
-}
-
-function flashCopied(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const originalBg = el.style.background;
-  const originalBorder = el.style.borderColor;
-
-  el.style.background = "#d1fae5"; // soft green background
-  el.style.borderColor = "#34d399"; // soft green border
-
-  setTimeout(() => {
-    el.style.background = originalBg;
-    el.style.borderColor = originalBorder;
-  }, 800);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -116,10 +83,4 @@ function flashCopied(id) {
 document.addEventListener("DOMContentLoaded", () => {
   const startBtn = document.getElementById("startBtn");
   if (startBtn) startBtn.addEventListener("click", toggleServer);
-
-  const configText = document.getElementById("configText");
-  if (configText) configText.addEventListener("click", copyConfig);
-
-  const jsonConfig = document.getElementById("jsonConfig");
-  if (jsonConfig) jsonConfig.addEventListener("click", copyJson);
 });

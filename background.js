@@ -129,8 +129,8 @@ const MCP_TOOLS = [
   // ─── Multi-Tab Workflows ───
   {
     name: "create_tab",
-    description: "Create a new tab with an optional URL",
-    inputSchema: { type: "object", properties: { url: { type: "string" }, active: { type: "boolean", default: true } } }
+    description: "Create a new tab with an optional URL. Opens in the background by default so it doesn't steal focus from the user; pass active=true to foreground it. Pass newWindow=true to open it in a separate Chrome window (same profile/session) instead of the current window.",
+    inputSchema: { type: "object", properties: { url: { type: "string" }, active: { type: "boolean", default: false }, newWindow: { type: "boolean", default: false } } }
   },
   {
     name: "batch_execute",
@@ -903,9 +903,17 @@ async function executeTool(toolName, args) {
 
     // ─── Multi-Tab Workflows ───
     case "create_tab": {
-      const newTab = await chrome.tabs.create({ url: args.url || "about:blank", active: args.active !== false });
+      const url = args.url || "about:blank";
+      const active = args.active === true;
+      let newTab;
+      if (args.newWindow) {
+        const newWin = await chrome.windows.create({ url, active, focused: active });
+        newTab = newWin.tabs[0];
+      } else {
+        newTab = await chrome.tabs.create({ url, active });
+      }
       if (args.url) await waitForTabLoad(newTab.id);
-      return { content: [{ type: "text", text: `Created tab ${newTab.id} with URL: ${args.url || "about:blank"}` }] };
+      return { content: [{ type: "text", text: `Created tab ${newTab.id} with URL: ${url}${args.newWindow ? " (new window)" : ""}` }] };
     }
 
     case "batch_execute": {
@@ -1641,8 +1649,8 @@ function injectAgentFrame() {
       pointer-events: none;
       user-select: none;
       box-shadow:
-        inset 0 0 24px 8px rgba(82, 183, 136, 0.35),
-        inset 0 0 48px 16px rgba(45, 106, 79, 0.12);
+        inset 0 0 24px 8px rgba(244, 114, 182, 0.35),
+        inset 0 0 48px 16px rgba(167, 139, 250, 0.12);
     }
     #browser-mcp-agent-frame::before {
       content: "";
@@ -1651,11 +1659,11 @@ function injectAgentFrame() {
       padding: 5px;
       background: linear-gradient(
         135deg,
-        rgba(82, 183, 136, 0.75),
-        rgba(116, 198, 157, 0.35),
-        rgba(45, 106, 79, 0.65),
-        rgba(82, 183, 136, 0.45),
-        rgba(116, 198, 157, 0.7)
+        rgba(244, 114, 182, 0.75),
+        rgba(167, 139, 250, 0.35),
+        rgba(225, 29, 72, 0.65),
+        rgba(244, 114, 182, 0.45),
+        rgba(167, 139, 250, 0.7)
       );
       background-size: 300% 300%;
       animation: browser-mcp-frame-shift 8s ease infinite;
@@ -1744,7 +1752,7 @@ function injectAgentFrame() {
       const cy = size - r - 1;
       c.beginPath();
       c.arc(cx, cy, r, 0, Math.PI * 2);
-      c.fillStyle = "#4E26EE";
+      c.fillStyle = "#f472b6";
       c.fill();
       c.lineWidth = 2;
       c.strokeStyle = "#ffffff";

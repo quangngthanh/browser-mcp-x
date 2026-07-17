@@ -1,0 +1,33 @@
+<svg id="svg-c4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="100%" height="100%">
+                <defs>
+                  <linearGradient id="bg-grad-4" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#180c24"/>
+                    <stop offset="100%" stop-color="#08030f"/>
+                  </linearGradient>
+                  <linearGradient id="ring-grad-c4" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#f472b6"/>
+                    <stop offset="50%" stop-color="#fb7185"/>
+                    <stop offset="100%" stop-color="#e11d48"/>
+                  </linearGradient>
+                  <linearGradient id="glow-grad-4" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#ec4899" stop-opacity="0.8"/>
+                    <stop offset="100%" stop-color="#f43f5e" stop-opacity="0.8"/>
+                  </linearGradient>
+                </defs>
+                <rect width="128" height="128" rx="28" fill="url(#bg-grad-4)"/>
+                <rect width="124" height="124" x="2" y="2" rx="26" fill="none" stroke="url(#ring-grad-c4)" stroke-width="2.5" opacity="0.4"/>
+
+                <!-- The Portal Ring -->
+                <circle cx="64" cy="64" r="42" fill="none" stroke="url(#ring-grad-c4)" stroke-width="8" stroke-linecap="round" stroke-dasharray="180 50" transform="rotate(-30 64 64)"/>
+                <circle cx="64" cy="64" r="30" fill="url(#glow-grad-4)" opacity="0.15" filter="blur(6px)"/>
+
+                <!-- Bracket / Console symbols inside representing programming protocol (MCP) -->
+                <!-- Left Bracket `<` -->
+                <path d="M50,44 L36,64 L50,84" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+                
+                <!-- Right Bracket `>` -->
+                <path d="M78,44 L92,64 L78,84" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+                
+                <!-- Command cursor line `_` -->
+                <line x1="56" y1="78" x2="72" y2="78" stroke="#f472b6" stroke-width="5" stroke-linecap="round"/>
+              </svg>

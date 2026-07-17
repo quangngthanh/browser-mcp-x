@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Browser MCP X — AI Browser Control</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=Fira+Code:wght@400;500&display=swap');
 
   * {
     margin: 0;
@@ -14,18 +14,16 @@
   }
 
   html {
-    border-radius: 16px;
-    overflow: hidden;
+    background: #08030f;
   }
 
   body {
     width: 320px;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-    color: #1e293b;
+    background: radial-gradient(circle at top left, #180c24 0%, #08030f 100%);
+    color: #e2e8f0;
     padding: 16px;
-    border-radius: 16px;
-    overflow: hidden;
+    overflow-x: hidden;
   }
 
   .header {
@@ -37,37 +35,49 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 10px;
     margin-bottom: 4px;
   }
 
-  .logo-icon {
-    font-size: 20px;
+  .logo-svg {
+    width: 28px;
+    height: 28px;
+    filter: drop-shadow(0 0 8px rgba(244, 114, 182, 0.4));
+    animation: float 4s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-2px) rotate(2deg); }
   }
 
   .logo-text {
-    font-size: 18px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 20px;
     font-weight: 800;
     letter-spacing: -0.025em;
-    background: linear-gradient(135deg, #0f172a 0%, #3b82f6 100%);
+    background: linear-gradient(135deg, #f472b6 0%, #fb7185 50%, #e11d48 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 2px 10px rgba(244, 114, 182, 0.15));
   }
 
   .subtitle {
     font-size: 10px;
-    color: #64748b;
+    color: #a78bfa;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
   }
 
   .status-card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    padding: 16px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
+    background: rgba(28, 16, 44, 0.45);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(244, 114, 182, 0.15);
+    border-radius: 14px;
+    padding: 14px 16px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
     margin-bottom: 12px;
     display: flex;
     flex-direction: column;
@@ -78,9 +88,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 13px;
-    padding-bottom: 8px;
-    border-bottom: 1px dashed #f1f5f9;
+    font-size: 12.5px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed rgba(244, 114, 182, 0.1);
   }
 
   .status-item:last-of-type {
@@ -89,25 +99,30 @@
   }
 
   .status-label {
-    color: #64748b;
+    color: #a291b5;
     font-weight: 500;
   }
 
   .status-value {
     font-weight: 600;
-    color: #0f172a;
+    color: #ffffff;
     display: flex;
     align-items: center;
     gap: 6px;
   }
 
   .font-mono {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-family: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 11px;
-    background: #f1f5f9;
-    padding: 2px 6px;
-    border-radius: 4px;
-    color: #334155;
+    background: rgba(9, 5, 16, 0.5);
+    border: 1px solid rgba(244, 114, 182, 0.08);
+    padding: 3px 8px;
+    border-radius: 6px;
+    color: #f472b6;
+    max-width: 170px;
+    overflow-x: auto;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .status-dot {
@@ -119,31 +134,35 @@
 
   .dot-waiting {
     background-color: #f59e0b;
-    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
-    animation: pulse-waiting 1.5s infinite;
+    box-shadow: 0 0 10px #f59e0b, 0 0 2px #f59e0b;
+    animation: pulse-waiting 2s infinite;
   }
 
   .dot-off {
-    background-color: #94a3b8;
+    background-color: #5b4a6b;
+    box-shadow: 0 0 4px rgba(91, 74, 107, 0.5);
   }
 
   .dot-on {
     background-color: #10b981;
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
-    animation: pulse-on 1.5s infinite;
+    box-shadow: 0 0 10px #10b981, 0 0 2px #10b981;
+    animation: pulse-on 2s infinite;
   }
 
   @keyframes pulse-waiting {
     0% {
       transform: scale(0.95);
+      opacity: 0.8;
       box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
     }
     70% {
       transform: scale(1);
-      box-shadow: 0 0 0 6px rgba(245, 158, 11, 0);
+      opacity: 1;
+      box-shadow: 0 0 0 5px rgba(245, 158, 11, 0);
     }
     100% {
       transform: scale(0.95);
+      opacity: 0.8;
       box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
     }
   }
@@ -151,14 +170,17 @@
   @keyframes pulse-on {
     0% {
       transform: scale(0.95);
+      opacity: 0.8;
       box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
     }
     70% {
       transform: scale(1);
-      box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+      opacity: 1;
+      box-shadow: 0 0 0 5px rgba(16, 185, 129, 0);
     }
     100% {
       transform: scale(0.95);
+      opacity: 0.8;
       box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
     }
   }
@@ -168,53 +190,81 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    padding: 10px 16px;
+    padding: 11px 16px;
     border: none;
-    border-radius: 10px;
-    font-size: 13px;
-    font-weight: 600;
+    border-radius: 8px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 13.5px;
+    font-weight: 700;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     outline: none;
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
   .btn-primary {
-    background: #2563eb;
+    background: linear-gradient(135deg, #f472b6 0%, #fb7185 50%, #e11d48 100%);
     color: #ffffff;
+    box-shadow: 0 4px 15px rgba(244, 114, 182, 0.25);
   }
 
   .btn-primary:hover {
-    background: #1d4ed8;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+    transform: translateY(-1.5px);
+    box-shadow: 0 6px 20px rgba(244, 114, 182, 0.4);
+    filter: brightness(1.05);
+  }
+
+  .btn-primary:active {
+    transform: translateY(0);
   }
 
   .btn-danger {
-    background: #ef4444;
-    color: #ffffff;
+    background: rgba(239, 68, 68, 0.08);
+    color: #f87171;
+    border: 1.5px solid rgba(239, 68, 68, 0.4);
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.1);
   }
 
   .btn-danger:hover {
-    background: #dc2626;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.2);
+    background: rgba(239, 68, 68, 0.18);
+    border-color: #ef4444;
+    color: #ffffff;
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.25);
+    transform: translateY(-1.5px);
+  }
+
+  .btn-danger:active {
+    transform: translateY(0);
   }
 
   .config-details {
-    margin-top: 8px;
-    border-top: 1px solid #e2e8f0;
-    padding-top: 8px;
+    margin-top: 4px;
+    border-top: 1px solid rgba(244, 114, 182, 0.1);
+    padding-top: 10px;
   }
 
   .config-details summary {
     font-size: 11px;
-    color: #64748b;
+    color: #a78bfa;
     cursor: pointer;
     user-select: none;
     font-weight: 600;
     outline: none;
-    padding: 4px 0;
+    padding: 6px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: color 0.2s;
+  }
+
+  .config-details summary:hover {
+    color: #f472b6;
+  }
+
+  .summary-icon {
+    opacity: 0.8;
   }
 
   .config-content {
@@ -222,49 +272,71 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    animation: slideDown 0.3s ease-out;
+  }
+
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   .config-label {
     font-size: 9px;
     font-weight: 700;
-    color: #94a3b8;
+    color: #a291b5;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
   }
 
   .config-value {
-    font-size: 11px;
-    color: #334155;
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    padding: 8px 10px;
+    font-size: 11.5px;
+    color: #e9d5ff;
+    background: rgba(9, 5, 16, 0.6);
+    border: 1px solid rgba(244, 114, 182, 0.12);
+    padding: 8px 12px;
     border-radius: 8px;
     cursor: pointer;
     word-break: break-all;
     transition: all 0.2s ease;
     position: relative;
+    padding-right: 32px;
+  }
+
+  pre.config-value {
+    white-space: pre;
+    word-break: normal;
+    overflow-x: auto;
+    font-family: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    line-height: 1.4;
   }
 
   .config-value:hover {
-    background: #f8fafc;
-    border-color: #cbd5e1;
+    background: rgba(28, 16, 44, 0.7);
+    border-color: rgba(244, 114, 182, 0.3);
   }
 
   .config-value::after {
     content: "📋";
     position: absolute;
-    right: 8px;
+    right: 10px;
     top: 50%;
     transform: translateY(-50%);
-    font-size: 10px;
-    opacity: 0.4;
+    font-size: 11px;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+  }
+
+  .config-value:hover::after {
+    opacity: 0.9;
   }
 
   .footer {
     text-align: center;
     font-size: 10px;
-    color: #94a3b8;
-    margin-top: 12px;
+    color: #5b4a6b;
+    margin-top: 16px;
+    letter-spacing: 0.03em;
   }
 </style>
 </head>
@@ -272,7 +344,30 @@
 
 <div class="header">
   <div class="logo-container">
-    <span class="logo-icon">🌐</span>
+    <svg class="logo-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+      <defs>
+        <linearGradient id="bg-grad-4" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#180c24"/>
+          <stop offset="100%" stop-color="#08030f"/>
+        </linearGradient>
+        <linearGradient id="ring-grad-c4" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#f472b6"/>
+          <stop offset="50%" stop-color="#fb7185"/>
+          <stop offset="100%" stop-color="#e11d48"/>
+        </linearGradient>
+        <linearGradient id="glow-grad-4" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#ec4899" stop-opacity="0.8"/>
+          <stop offset="100%" stop-color="#f43f5e" stop-opacity="0.8"/>
+        </linearGradient>
+      </defs>
+      <rect width="128" height="128" rx="28" fill="url(#bg-grad-4)"/>
+      <rect width="124" height="124" x="2" y="2" rx="26" fill="none" stroke="url(#ring-grad-c4)" stroke-width="2.5" opacity="0.4"/>
+      <circle cx="64" cy="64" r="42" fill="none" stroke="url(#ring-grad-c4)" stroke-width="8" stroke-linecap="round" stroke-dasharray="180 50" transform="rotate(-30 64 64)"/>
+      <circle cx="64" cy="64" r="30" fill="url(#glow-grad-4)" opacity="0.15" filter="blur(6px)"/>
+      <path d="M50,44 L36,64 L50,84" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M78,44 L92,64 L78,84" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <line x1="56" y1="78" x2="72" y2="78" stroke="#f472b6" stroke-width="5" stroke-linecap="round"/>
+    </svg>
     <span class="logo-text">Browser MCP X</span>
   </div>
   <p class="subtitle">AI Browser Control</p>
@@ -286,12 +381,16 @@
       <span id="statusText">Stopped</span>
     </span>
   </div>
+  <div class="status-item">
+    <span class="status-label">Relay WebSocket</span>
+    <span class="status-value font-mono" id="wsStatus">—</span>
+  </div>
   <button class="btn btn-primary" id="startBtn">Start</button>
 </div>
 
 
 <div class="footer">
-  Browser MCP X · Zero-setup
+  Browser MCP X · Make easier with MCP
 </div>
 
 <script src="popup.js"></script>
