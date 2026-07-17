@@ -363,8 +363,22 @@ async function captureWithDebugger(tabId, format = "jpeg", quality = 75) {
 }
 
 // ─── Tool Execution ───
-async function executeTool(toolName, args) {
-  const tab = await getAgentTab();
+async function executeTool(toolName, args, overrideTabId = null) {
+  const explicitTabId = args.tabId ?? args.id ?? overrideTabId;
+  let tab = null;
+
+  if (explicitTabId != null) {
+    try {
+      tab = await chrome.tabs.get(Number(explicitTabId));
+    } catch (e) {
+      // Tab not found or restricted
+    }
+  }
+
+  if (!tab) {
+    tab = await getAgentTab();
+  }
+
   if (!tab && !["get_tabs", "switch_tab", "close_tab"].includes(toolName)) {
     throw new Error("No active tab found");
   }
@@ -922,7 +936,7 @@ async function executeTool(toolName, args) {
       const results = [];
       for (const step of steps) {
         try {
-          const stepResult = await executeTool(step.tool, step.args || {});
+          const stepResult = await executeTool(step.tool, step.args || {}, targetTabId);
           results.push({ tool: step.tool, success: true, result: stepResult });
         } catch (e) {
           results.push({ tool: step.tool, success: false, error: e.message });
