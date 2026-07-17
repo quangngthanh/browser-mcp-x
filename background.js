@@ -262,6 +262,25 @@ async function getAgentTab() {
       persistAgentContext();
     }
   }
+
+  // Try to find a valid tab among those previously manipulated by the agent
+  if (activeManipulatedTabIds.size > 0) {
+    for (const tabId of activeManipulatedTabIds) {
+      try {
+        const tab = await chrome.tabs.get(tabId);
+        if (tab) {
+          agentTargetTabId = tab.id;
+          persistAgentContext();
+          return tab;
+        }
+      } catch (e) {
+        activeManipulatedTabIds.delete(tabId);
+        persistAgentContext();
+      }
+    }
+  }
+
+  // Fallback to the active tab in the current focused window
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab) {
     agentTargetTabId = tab.id;
@@ -924,7 +943,8 @@ async function executeTool(toolName, args, overrideTabId = null) {
         const newWin = await chrome.windows.create({ url, active, focused: active });
         newTab = newWin.tabs[0];
       } else {
-        newTab = await chrome.tabs.create({ url, active });
+        const windowId = tab ? tab.windowId : undefined;
+        newTab = await chrome.tabs.create({ windowId, url, active });
       }
       if (args.url) await waitForTabLoad(newTab.id);
       return { content: [{ type: "text", text: `Created tab ${newTab.id} with URL: ${url}${args.newWindow ? " (new window)" : ""}` }] };
