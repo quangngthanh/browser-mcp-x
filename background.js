@@ -1868,7 +1868,6 @@ function removeAgentFrame() {
 async function clearAllAgentFrames() {
   const activeIds = Array.from(activeManipulatedTabIds);
   activeManipulatedTabIds.clear();
-  agentTargetTabId = null;
   persistAgentContext();
   for (const tabId of activeIds) {
     try {
