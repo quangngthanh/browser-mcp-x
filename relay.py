@@ -485,6 +485,24 @@ class StatusHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(status, indent=2).encode())
 
     def do_POST(self):
+        if self.path == "/restart-ws":
+            global extension_client
+            with extension_lock:
+                was_connected = bool(extension_client and extension_client.alive)
+                if extension_client:
+                    extension_client.close()
+                extension_client = None
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "restarted": was_connected,
+                "message": "Closed extension WebSocket connection; extension will auto-reconnect." if was_connected
+                           else "No active extension connection to restart."
+            }).encode())
+            return
+
         if self.path != "/mcp":
             self.send_response(404)
             self.send_header("Content-Type", "application/json")
