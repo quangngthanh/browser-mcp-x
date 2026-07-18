@@ -1,6 +1,6 @@
 {
   "name": "Browser MCP X — AI Browser Control via MCP",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Turn Chrome into an MCP server. AI agents control your browser: navigate, click, type, screenshot. Zero setup.",
   "manifest_version": 3,
   "permissions": [

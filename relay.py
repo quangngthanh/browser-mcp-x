@@ -23,7 +23,7 @@ from socketserver import ThreadingMixIn
 
 MCP_PORT = 9275
 WS_PORT = 9274  # WebSocket port for extension connection
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 
 # ─── WebSocket Server (hand-rolled, zero deps) ───
 
@@ -249,17 +249,18 @@ STATIC_TOOLS = [
     {"name": "screenshot", "description": "Take a screenshot of the active tab", "inputSchema": {"type": "object", "properties": {"format": {"type": "string", "enum": ["jpeg", "png"], "default": "jpeg"}, "quality": {"type": "number", "description": "JPEG quality 0-100 (ignored for png)", "default": 75}}}},
     {"name": "get_dom", "description": "Extract the DOM structure of the active tab as text (simplified accessibility tree)", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string", "default": "body"}}}},
     {"name": "click", "description": "Click an element by CSS selector", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string"}}, "required": ["selector"]}},
-    {"name": "type_text", "description": "Type text into an input field identified by CSS selector", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string"}, "text": {"type": "string"}}, "required": ["selector", "text"]}},
+    {"name": "type_text", "description": "Type text into an input, textarea, or contenteditable / rich-text editor. Uses native setters + insertText so React-controlled fields update.", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string"}, "text": {"type": "string"}}, "required": ["selector", "text"]}},
     {"name": "extract_text", "description": "Extract text content from the active tab, optionally from a specific selector", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string", "default": "body"}}}},
     {"name": "scroll", "description": "Scroll the page or a specific element (e.g. a dialog overlay) by a given amount", "inputSchema": {"type": "object", "properties": {"direction": {"type": "string", "enum": ["up", "down"], "default": "down"}, "amount": {"type": "number", "default": 500}, "selector": {"type": "string", "description": "CSS selector of the scrollable container; omit to scroll the page"}}}},
     {"name": "get_tabs", "description": "List all open tabs with their IDs, titles, and URLs", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "switch_tab", "description": "Switch to a specific tab by its ID", "inputSchema": {"type": "object", "properties": {"tabId": {"type": "number"}}, "required": ["tabId"]}},
     {"name": "close_tab", "description": "Close a tab by its ID", "inputSchema": {"type": "object", "properties": {"tabId": {"type": "number"}}, "required": ["tabId"]}},
-    {"name": "evaluate", "description": "Run JavaScript in the active tab and return the result", "inputSchema": {"type": "object", "properties": {"script": {"type": "string"}}, "required": ["script"]}},
+    {"name": "evaluate", "description": "Run JavaScript in the active tab. Awaits Promises. Objects are JSON-serialized.", "inputSchema": {"type": "object", "properties": {"script": {"type": "string"}}, "required": ["script"]}},
     {"name": "get_page_info", "description": "Get metadata about the current page (title, URL, viewport size)", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "fill_form", "description": "Fill multiple form fields at once. Pass an object of {selector: value} pairs.", "inputSchema": {"type": "object", "properties": {"fields": {"type": "object"}}, "required": ["fields"]}},
     {"name": "wait", "description": "Wait for a specified number of milliseconds", "inputSchema": {"type": "object", "properties": {"ms": {"type": "number", "default": 1000}}}},
-    {"name": "press_key", "description": "Simulate pressing a keyboard key (e.g. 'Enter', 'Tab', 'Escape')", "inputSchema": {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]}},
+    {"name": "press_key", "description": "Press a key on the focused element. Supports combos like 'Enter', 'Escape', 'Control+a', 'Ctrl+Enter'.", "inputSchema": {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]}},
+    {"name": "download_image", "description": "Download a page image to the user's Downloads folder via canvas capture (avoids CORS). Prefer over fetch(img.src).", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string", "description": "CSS selector for <img>. If omitted or not found, downloads the largest image on the page."}, "filename": {"type": "string", "description": "Filename, e.g. image.png"}}}},
     {"name": "get_links", "description": "Extract all links from the page with their text and href", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "start_recording", "description": "Start recording browser actions (clicks, inputs, navigations) for later playback", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "stop_recording", "description": "Stop recording and return the recorded action sequence as JSON", "inputSchema": {"type": "object", "properties": {}}},
@@ -468,11 +469,12 @@ class StatusHandler(BaseHTTPRequestHandler):
                 # Recording / playback
                 "start_recording", "stop_recording", "playback",
                 # Debugging
-                "evaluate", "wait", "press_key", "get_console_logs",
+                "evaluate", "wait", "press_key", "download_image", "get_console_logs",
                 "get_network_requests", "handle_dialog",
                 # Smart interaction
                 "highlight", "wait_for_element", "get_interactive_elements",
-                "click_by_id", "type_by_id", "click_text", "hover"
+                "click_by_id", "type_by_id", "click_text", "hover",
+                "snapshot", "select_option"
             ]
         }
 

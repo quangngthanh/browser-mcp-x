@@ -5,11 +5,22 @@
 // ═══════════════════════════════════════════════════════════
 
 const MCP_PORT = 9275;
-const MCP_VERSION = "0.4.0";
+const MCP_VERSION = "0.4.1";
 let wsServer = null;
 let wsClients = new Set();
 let isRunning = false;
 let connectedAgent = null;
+
+/** Stable refs from the last get_interactive_elements call (per tab). */
+let interactiveElementCache = { tabId: null, filter: "all", items: [] };
+
+const INTERACTIVE_SELECTORS = {
+  all: "button, a[href], input, select, textarea, [contenteditable='true'], [role='button'], [role='textbox'], [onclick], [tabindex]",
+  buttons: "button, [role='button'], input[type='submit'], input[type='button'], [onclick]",
+  links: "a[href]",
+  inputs: "input, select, textarea, [contenteditable='true'], [role='textbox']",
+  forms: "form"
+};
 
 // ─── MCP Tool Definitions ───
 const MCP_TOOLS = [
@@ -41,7 +52,7 @@ const MCP_TOOLS = [
   },
   {
     name: "type_text",
-    description: "Type text into an input field identified by CSS selector",
+    description: "Type text into an input, textarea, or contenteditable / rich-text editor. Uses native setters + insertText so React-controlled fields update.",
     inputSchema: { type: "object", properties: { selector: { type: "string" }, text: { type: "string" } }, required: ["selector", "text"] }
   },
   {
@@ -71,7 +82,7 @@ const MCP_TOOLS = [
   },
   {
     name: "evaluate",
-    description: "Run JavaScript in the active tab and return the result",
+    description: "Run JavaScript in the active tab. Awaits Promises. Objects are JSON-serialized.",
     inputSchema: { type: "object", properties: { script: { type: "string" } }, required: ["script"] }
   },
   {
@@ -91,8 +102,19 @@ const MCP_TOOLS = [
   },
   {
     name: "press_key",
-    description: "Simulate pressing a keyboard key (e.g. 'Enter', 'Tab', 'Escape')",
+    description: "Press a key on the focused element. Supports combos like 'Enter', 'Escape', 'Control+a', 'Ctrl+Enter'.",
     inputSchema: { type: "object", properties: { key: { type: "string" } }, required: ["key"] }
+  },
+  {
+    name: "download_image",
+    description: "Download a page image to the user's Downloads folder via canvas capture (avoids CORS). Prefer over fetch(img.src).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: { type: "string", description: "CSS selector for <img>. If omitted or not found, downloads the largest image on the page." },
+        filename: { type: "string", description: "Filename, e.g. image.png" }
+      }
+    }
   },
   {
     name: "get_links",
@@ -352,6 +374,31 @@ function withTimeout(promise, ms, label) {
   ]);
 }
 
+// Trusted click via CDP — required when apps ignore synthetic el.click() (isTrusted=false).
+async function trustedClickAt(tabId, x, y) {
+  const target = { tabId };
+  const dprResult = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => window.devicePixelRatio || 1
+  });
+  const dpr = dprResult[0]?.result || 1;
+  // On Windows scaled displays, CDP often needs layout coordinates * DPR.
+  const sx = Math.round(x * dpr);
+  const sy = Math.round(y * dpr);
+
+  await chrome.debugger.detach(target).catch(() => {});
+  await withTimeout(chrome.debugger.attach(target, "1.3"), 5000, "debugger.attach");
+  try {
+    const base = { x: sx, y: sy, button: "left", clickCount: 1 };
+    await chrome.debugger.sendCommand(target, "Input.dispatchMouseEvent", { type: "mouseMoved", ...base });
+    await chrome.debugger.sendCommand(target, "Input.dispatchMouseEvent", { type: "mousePressed", ...base });
+    await chrome.debugger.sendCommand(target, "Input.dispatchMouseEvent", { type: "mouseReleased", ...base });
+    return true;
+  } finally {
+    await chrome.debugger.detach(target).catch(() => {});
+  }
+}
+
 async function captureWithDebugger(tabId, format = "jpeg", quality = 75) {
   const target = { tabId };
   let attached = false;
@@ -509,6 +556,7 @@ async function executeTool(toolName, args, overrideTabId = null) {
     case "type_text": {
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id, allFrames: true },
+        world: "MAIN",
         func: (sel, text) => {
           function findElement(root) {
             return root.querySelector(sel);
@@ -523,11 +571,30 @@ async function executeTool(toolName, args, overrideTabId = null) {
             }
           }
           if (!el) return `Element not found: ${sel}`;
+
           el.focus();
-          el.value = text;
+          const isCE = el.isContentEditable || el.getAttribute("contenteditable") === "true";
+          if (isCE) {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            const inserted = document.execCommand("insertText", false, text);
+            if (!inserted) {
+              el.textContent = text;
+              el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
+            }
+            el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
+            return `Typed into contenteditable ${sel}`;
+          }
+
+          const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+          const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+          if (setter) setter.call(el, text);
+          else el.value = text;
           el.dispatchEvent(new Event("input", { bubbles: true }));
           el.dispatchEvent(new Event("change", { bubbles: true }));
-          // Also dispatch a keyboard input event for React-controlled inputs.
           el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
           return `Typed "${text}" into ${sel}`;
         },
@@ -630,23 +697,34 @@ async function executeTool(toolName, args, overrideTabId = null) {
     case "evaluate": {
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        func: (script) => {
-          try {
-            // Use Function constructor instead of eval — bypasses CSP 'unsafe-eval'
-            const fn = new Function("return (" + script + ")");
-            return String(fn());
-          } catch(e) {
-            // Try as expression if Function fails
+        world: "MAIN",
+        func: async (script) => {
+          const serialize = (v) => {
+            if (v === undefined) return "undefined";
+            if (typeof v === "string") return v;
+            if (typeof v === "number" || typeof v === "boolean" || v === null) return String(v);
             try {
-              const fn2 = new Function(script);
-              return String(fn2());
-            } catch(e2) {
-              return `Error: ${e2.message}`;
+              return JSON.stringify(v);
+            } catch {
+              return String(v);
             }
+          };
+          try {
+            let result;
+            try {
+              result = (new Function("return (" + script + ")"))();
+            } catch {
+              result = (new Function(script))();
+            }
+            if (result != null && typeof result.then === "function") {
+              result = await result;
+            }
+            return serialize(result);
+          } catch (e) {
+            return `Error: ${e.message}`;
           }
         },
-        args: [args.script],
-        world: "MAIN"
+        args: [args.script]
       });
       return { content: [{ type: "text", text: results[0]?.result || "undefined" }] };
     }
@@ -703,19 +781,70 @@ async function executeTool(toolName, args, overrideTabId = null) {
     }
 
     case "press_key": {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: (key) => {
-          document.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
-          document.dispatchEvent(new KeyboardEvent("keyup", { key, bubbles: true }));
-          return `Pressed ${key}`;
-        },
-        args: [args.key]
-      });
-      if (recordingState.isRecording) {
-        recordingState.actions.push({ type: "key", key: args.key, timestamp: Date.now() });
+      const keyCombo = args.key;
+      const parts = String(keyCombo).split("+").map((s) => s.trim()).filter(Boolean);
+      const keyRaw = parts[parts.length - 1] || keyCombo;
+      const mods = {
+        ctrlKey: parts.some((p) => /^(control|ctrl)$/i.test(p)),
+        altKey: parts.some((p) => /^alt$/i.test(p)),
+        shiftKey: parts.some((p) => /^shift$/i.test(p)),
+        metaKey: parts.some((p) => /^(meta|cmd|command)$/i.test(p))
+      };
+
+      // Prefer CDP trusted key events — many SPAs ignore synthetic KeyboardEvent (isTrusted=false).
+      try {
+        const target = { tabId: tab.id };
+        await chrome.debugger.detach(target).catch(() => {});
+        await withTimeout(chrome.debugger.attach(target, "1.3"), 5000, "debugger.attach");
+        try {
+          const key = keyRaw.length === 1 ? keyRaw : keyRaw;
+          const code = key.length === 1 ? `Key${key.toUpperCase()}` : (key === "Enter" ? "Enter" : key);
+          const base = {
+            text: key.length === 1 ? key : (key === "Enter" ? "\r" : ""),
+            unmodifiedText: key.length === 1 ? key : (key === "Enter" ? "\r" : ""),
+            code,
+            key,
+            windowsVirtualKeyCode: key === "Enter" ? 13 : (key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0),
+            nativeVirtualKeyCode: key === "Enter" ? 13 : (key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0),
+            modifiers: (mods.altKey ? 1 : 0) | (mods.ctrlKey ? 2 : 0) | (mods.metaKey ? 4 : 0) | (mods.shiftKey ? 8 : 0)
+          };
+          await chrome.debugger.sendCommand(target, "Input.dispatchKeyEvent", { type: "keyDown", ...base });
+          if (key.length === 1 || key === "Enter") {
+            await chrome.debugger.sendCommand(target, "Input.dispatchKeyEvent", { type: "char", ...base });
+          }
+          await chrome.debugger.sendCommand(target, "Input.dispatchKeyEvent", { type: "keyUp", ...base });
+        } finally {
+          await chrome.debugger.detach(target).catch(() => {});
+        }
+        if (recordingState.isRecording) {
+          recordingState.actions.push({ type: "key", key: args.key, timestamp: Date.now() });
+        }
+        return { content: [{ type: "text", text: `Pressed ${keyCombo} via cdp` }] };
+      } catch (e) {
+        // Fallback synthetic
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          world: "MAIN",
+          func: (combo) => {
+            const parts = String(combo).split("+").map((s) => s.trim()).filter(Boolean);
+            const key = parts[parts.length - 1] || combo;
+            const mods = {
+              ctrlKey: parts.some((p) => /^(control|ctrl)$/i.test(p)),
+              altKey: parts.some((p) => /^alt$/i.test(p)),
+              shiftKey: parts.some((p) => /^shift$/i.test(p)),
+              metaKey: parts.some((p) => /^(meta|cmd|command)$/i.test(p))
+            };
+            const targetEl = document.activeElement || document.body;
+            const opts = { key, code: key.length === 1 ? `Key${key.toUpperCase()}` : key, bubbles: true, cancelable: true, ...mods };
+            targetEl.dispatchEvent(new KeyboardEvent("keydown", opts));
+            targetEl.dispatchEvent(new KeyboardEvent("keypress", opts));
+            targetEl.dispatchEvent(new KeyboardEvent("keyup", opts));
+            return `Pressed ${combo} on ${targetEl.tagName} (synthetic fallback)`;
+          },
+          args: [keyCombo]
+        });
+        return { content: [{ type: "text", text: `${results[0]?.result}; cdp failed: ${e.message}` }] };
       }
-      return { content: [{ type: "text", text: results[0]?.result }] };
     }
 
     case "get_links": {
@@ -1077,81 +1206,193 @@ async function executeTool(toolName, args, overrideTabId = null) {
       const filter = args.filter || "all";
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        func: (flt) => {
-          let elements = [];
-          const selectors = {
-            all: "button, a[href], input, select, textarea, [role='button'], [onclick], [tabindex]",
-            buttons: "button, [role='button'], input[type='submit'], input[type='button'], [onclick]",
-            links: "a[href]",
-            inputs: "input, select, textarea",
-            forms: "form"
-          };
-          const els = document.querySelectorAll(selectors[flt] || selectors.all);
-          els.forEach((el, idx) => {
+        world: "MAIN",
+        func: (flt, selectorMap) => {
+          function cssPath(el) {
+            if (el.id) return `#${CSS.escape(el.id)}`;
+            const parts = [];
+            let cur = el;
+            while (cur && cur.nodeType === 1 && parts.length < 8) {
+              let part = cur.tagName.toLowerCase();
+              if (cur.id) {
+                parts.unshift(`#${CSS.escape(cur.id)}`);
+                break;
+              }
+              const parent = cur.parentElement;
+              if (parent) {
+                const siblings = [...parent.children].filter((c) => c.tagName === cur.tagName);
+                if (siblings.length > 1) {
+                  part += `:nth-of-type(${siblings.indexOf(cur) + 1})`;
+                }
+              }
+              parts.unshift(part);
+              if (cur === document.body || cur === document.documentElement) break;
+              cur = parent;
+            }
+            return parts.join(" > ");
+          }
+
+          const elements = [];
+          const els = document.querySelectorAll(selectorMap[flt] || selectorMap.all);
+          els.forEach((el) => {
             const rect = el.getBoundingClientRect();
             if (rect.width === 0 && rect.height === 0) return;
-            const text = (el.textContent || el.value || el.placeholder || el.getAttribute("aria-label") || "").trim().substring(0, 60);
+            const text = (el.textContent || el.value || el.placeholder || el.getAttribute("aria-label") || "")
+              .trim()
+              .substring(0, 60);
             const tag = el.tagName.toLowerCase();
             const type = el.type || el.getAttribute("role") || "";
-            const id = el.id ? `#${el.id}` : "";
-            const name = el.name ? `[name="${el.name}"]` : "";
-            const cls = el.className ? `.${String(el.className).split(" ")[0]}` : "";
-            const selector = id || name || (cls ? `${tag}${cls}` : `${tag}:nth-of-type(1)`);
+            const path = cssPath(el);
             elements.push({
-              id: idx,
-              tag, type, text, selector,
-              position: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) }
+              id: elements.length,
+              tag,
+              type,
+              text,
+              selector: path,
+              position: {
+                x: Math.round(rect.x),
+                y: Math.round(rect.y),
+                w: Math.round(rect.width),
+                h: Math.round(rect.height)
+              }
             });
           });
           return elements.slice(0, 100);
         },
-        args: [filter]
+        args: [filter, INTERACTIVE_SELECTORS]
       });
-      return { content: [{ type: "text", text: JSON.stringify(results[0]?.result || [], null, 2) }] };
+      const items = results[0]?.result || [];
+      interactiveElementCache = { tabId: tab.id, filter, items };
+      return { content: [{ type: "text", text: JSON.stringify(items, null, 2) }] };
     }
 
     case "click_by_id": {
+      const elementId = args.elementId;
+      const cached =
+        interactiveElementCache.tabId === tab.id
+          ? interactiveElementCache.items.find((i) => i.id === elementId)
+          : null;
+
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        func: (id) => {
-          const selectors = "button, a[href], input, select, textarea, [role='button'], [onclick], [tabindex]";
-          const els = document.querySelectorAll(selectors);
-          let count = 0;
-          for (const el of els) {
-            const rect = el.getBoundingClientRect();
-            if (rect.width === 0 && rect.height === 0) continue;
-            if (count === id) { el.click(); return `Clicked element #${id}: ${(el.textContent || el.value || "").trim().substring(0, 40)}`; }
-            count++;
+        world: "MAIN",
+        func: (id, cachedItem, selectorMap) => {
+          let el = null;
+          let via = "index";
+          if (cachedItem?.selector) {
+            try {
+              el = document.querySelector(cachedItem.selector);
+              if (el) via = "cache";
+            } catch (e) {}
           }
-          return `Element #${id} not found`;
+          if (!el) {
+            const els = document.querySelectorAll(selectorMap.all);
+            let count = 0;
+            for (const candidate of els) {
+              const rect = candidate.getBoundingClientRect();
+              if (rect.width === 0 && rect.height === 0) continue;
+              if (count === id) {
+                el = candidate;
+                via = "index-fallback";
+                break;
+              }
+              count++;
+            }
+          }
+          if (!el) return { ok: false, error: `Element #${id} not found` };
+          el.scrollIntoView({ behavior: "instant", block: "center" });
+          const rect = el.getBoundingClientRect();
+          const label = (el.textContent || el.value || "").trim().substring(0, 40);
+          return {
+            ok: true,
+            via,
+            label,
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2
+          };
         },
-        args: [args.elementId]
+        args: [elementId, cached || null, INTERACTIVE_SELECTORS]
       });
-      return { content: [{ type: "text", text: results[0]?.result }] };
+      const loc = results[0]?.result;
+      if (!loc?.ok) {
+        return { content: [{ type: "text", text: loc?.error || `Element #${elementId} not found` }] };
+      }
+      try {
+        await trustedClickAt(tab.id, loc.x, loc.y);
+        return { content: [{ type: "text", text: `Clicked element #${elementId} via ${loc.via}+cdp: ${loc.label}` }] };
+      } catch (e) {
+        // Fallback synthetic click
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          world: "MAIN",
+          func: (sel) => {
+            const el = document.querySelector(sel);
+            if (el) el.click();
+          },
+          args: [cached?.selector || null]
+        });
+        return { content: [{ type: "text", text: `Clicked element #${elementId} via ${loc.via} (cdp failed: ${e.message}): ${loc.label}` }] };
+      }
     }
 
     case "type_by_id": {
+      const elementId = args.elementId;
+      const cached =
+        interactiveElementCache.tabId === tab.id
+          ? interactiveElementCache.items.find((i) => i.id === elementId)
+          : null;
+
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        func: (id, text) => {
-          const selectors = "button, a[href], input, select, textarea, [role='button'], [onclick], [tabindex]";
-          const els = document.querySelectorAll(selectors);
-          let count = 0;
-          for (const el of els) {
-            const rect = el.getBoundingClientRect();
-            if (rect.width === 0 && rect.height === 0) continue;
-            if (count === id) {
-              el.focus();
-              el.value = text;
-              el.dispatchEvent(new Event("input", { bubbles: true }));
-              el.dispatchEvent(new Event("change", { bubbles: true }));
-              return `Typed "${text}" into element #${id}`;
-            }
-            count++;
+        world: "MAIN",
+        func: (id, text, cachedItem, selectorMap) => {
+          let el = null;
+          if (cachedItem?.selector) {
+            try {
+              el = document.querySelector(cachedItem.selector);
+            } catch (e) {}
           }
-          return `Element #${id} not found`;
+          if (!el) {
+            const els = document.querySelectorAll(selectorMap.all);
+            let count = 0;
+            for (const candidate of els) {
+              const rect = candidate.getBoundingClientRect();
+              if (rect.width === 0 && rect.height === 0) continue;
+              if (count === id) {
+                el = candidate;
+                break;
+              }
+              count++;
+            }
+          }
+          if (!el) return `Element #${id} not found`;
+
+          el.focus();
+          const isCE = el.isContentEditable || el.getAttribute("contenteditable") === "true";
+          if (isCE) {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            const inserted = document.execCommand("insertText", false, text);
+            if (!inserted) {
+              el.textContent = text;
+            }
+            el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
+            return `Typed into contenteditable #${id}`;
+          }
+
+          const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+          const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+          if (setter) setter.call(el, text);
+          else el.value = text;
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
+          return `Typed "${text}" into element #${id}`;
         },
-        args: [args.elementId, args.text]
+        args: [elementId, args.text, cached || null, INTERACTIVE_SELECTORS]
       });
       return { content: [{ type: "text", text: results[0]?.result }] };
     }
@@ -1365,6 +1606,53 @@ async function executeTool(toolName, args, overrideTabId = null) {
       });
       const snap = await captureAriaSnapshot(tab.id);
       return { content: [{ type: "text", text: results[0]?.result }, { type: "text", text: snap }] };
+    }
+
+    case "download_image": {
+      const selector = args.selector || null;
+      const filename = args.filename || `browser-mcp-${Date.now()}.png`;
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: "MAIN",
+        func: async (sel, fname) => {
+          const largestImg = () => [...document.querySelectorAll("img")]
+            .filter((i) => i.naturalWidth > 200)
+            .sort((a, b) => b.naturalWidth * b.naturalHeight - a.naturalWidth * a.naturalHeight)[0];
+
+          let img = null;
+          if (sel) {
+            const el = document.querySelector(sel);
+            if (el?.tagName === "IMG" && el.naturalWidth) img = el;
+          }
+          if (!img) img = largestImg();
+          if (!img || !img.naturalWidth) return { ok: false, error: "Image not found" };
+
+          const canvas = document.createElement("canvas");
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          try {
+            canvas.getContext("2d").drawImage(img, 0, 0);
+          } catch (e) {
+            return { ok: false, error: `Canvas failed: ${e.message}` };
+          }
+
+          const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+          if (!blob) return { ok: false, error: "toBlob failed" };
+
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = fname;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 10000);
+          return { ok: true, size: blob.size, w: img.naturalWidth, h: img.naturalHeight, filename: fname };
+        },
+        args: [selector, filename]
+      });
+      const payload = results[0]?.result || { ok: false, error: "no result" };
+      return { content: [{ type: "text", text: JSON.stringify(payload) }] };
     }
 
     default:
