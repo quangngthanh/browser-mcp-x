@@ -559,6 +559,15 @@ async function executeTool(toolName, args, overrideTabId = null) {
             const name = el.getAttribute("name") || "";
             const id = el.id || "";
             const cls = el.className || "";
+            const rect = el.getBoundingClientRect();
+            const isInViewport = (
+              rect.top >= 0 &&
+              rect.left >= 0 &&
+              rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+              rect.right <= (window.innerWidth || document.documentElement.clientWidth) &&
+              rect.width > 0 &&
+              rect.height > 0
+            );
             let indent = "  ".repeat(depth);
             let line = `${indent}<${tag}`;
             if (id) line += ` #${id}`;
@@ -567,6 +576,7 @@ async function executeTool(toolName, args, overrideTabId = null) {
             if (aria) line += ` "${aria}"`;
             if (href) line += ` href="${href.substring(0, 60)}"`;
             if (name) line += ` name="${name}"`;
+            line += ` [inViewport=${isInViewport}]`;
             if (text && text.length < 80 && el.children.length === 0) line += `>${text}</${tag}>`;
             else line += `>`;
             let result = line + "\n";
@@ -599,7 +609,7 @@ async function executeTool(toolName, args, overrideTabId = null) {
             }
           }
           if (!el) return `Element not found: ${sel}`;
-          el.scrollIntoView({ behavior: "instant", block: "center" });
+          el.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
           const rect = el.getBoundingClientRect();
           const opts = { bubbles: true, cancelable: true, view: window, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
           el.dispatchEvent(new PointerEvent("pointerdown", opts));
@@ -638,6 +648,7 @@ async function executeTool(toolName, args, overrideTabId = null) {
           }
           if (!el) return `Element not found: ${sel}`;
 
+          el.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
           el.focus();
           const isCE = el.isContentEditable || el.getAttribute("contenteditable") === "true";
           if (isCE) {
@@ -1309,12 +1320,21 @@ async function executeTool(toolName, args, overrideTabId = null) {
             const tag = el.tagName.toLowerCase();
             const type = el.type || el.getAttribute("role") || "";
             const path = cssPath(el);
+            const isInViewport = (
+              rect.top >= 0 &&
+              rect.left >= 0 &&
+              rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+              rect.right <= (window.innerWidth || document.documentElement.clientWidth) &&
+              rect.width > 0 &&
+              rect.height > 0
+            );
             elements.push({
               id: elements.length,
               tag,
               type,
               text,
               selector: path,
+              isInViewport,
               position: {
                 x: Math.round(rect.x),
                 y: Math.round(rect.y),
@@ -1366,7 +1386,7 @@ async function executeTool(toolName, args, overrideTabId = null) {
             }
           }
           if (!el) return { ok: false, error: `Element #${id} not found` };
-          el.scrollIntoView({ behavior: "instant", block: "center" });
+          el.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
           const rect = el.getBoundingClientRect();
           const label = (el.textContent || el.value || "").trim().substring(0, 40);
           return {
@@ -1433,6 +1453,7 @@ async function executeTool(toolName, args, overrideTabId = null) {
           }
           if (!el) return `Element #${id} not found`;
 
+          el.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
           el.focus();
           const isCE = el.isContentEditable || el.getAttribute("contenteditable") === "true";
           if (isCE) {
@@ -1493,6 +1514,7 @@ async function executeTool(toolName, args, overrideTabId = null) {
             if (bestMatch && bestScore <= searchText.length + 20) break;
           }
           if (bestMatch) {
+            bestMatch.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
             bestMatch.click();
             return `Clicked: "${(bestMatch.textContent || "").trim().substring(0, 60)}"`;
           }
@@ -1509,11 +1531,11 @@ async function executeTool(toolName, args, overrideTabId = null) {
         func: (sel) => {
           const el = document.querySelector(sel);
           if (!el) return `Element not found: ${sel}`;
+          el.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
           const events = ["mouseenter", "mouseover", "mousemove", "hover"];
           for (const type of events) {
             el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
           }
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
           return `Hovered: ${sel}`;
         },
         args: [args.selector]
@@ -1651,6 +1673,7 @@ async function executeTool(toolName, args, overrideTabId = null) {
         func: (sel, value, text, index) => {
           const el = document.querySelector(sel);
           if (!el || el.tagName.toLowerCase() !== "select") return `select not found: ${sel}`;
+          el.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
           if (value !== undefined) {
             el.value = value;
           } else if (text !== undefined) {
@@ -1795,6 +1818,18 @@ async function captureAriaSnapshot(tabId) {
         }
         const hm = tag.match(/^h([1-6])$/);
         if (hm) s.push(`level=${hm[1]}`);
+
+        const rect = el.getBoundingClientRect();
+        const isInViewport = (
+          rect.top >= 0 &&
+          rect.left >= 0 &&
+          rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+          rect.right <= (window.innerWidth || document.documentElement.clientWidth) &&
+          rect.width > 0 &&
+          rect.height > 0
+        );
+        s.push(`isInViewport=${isInViewport}`);
+
         return s;
       }
 
