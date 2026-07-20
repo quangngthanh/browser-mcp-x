@@ -329,6 +329,19 @@ async function restoreAgentContext() {
 }
 
 async function getAgentTab() {
+  // Always default to dedicated AI agent tab in "🤖 AI Agent" tab group
+  const activeAiTabId = await getActiveTabId();
+  if (activeAiTabId !== null) {
+    try {
+      const tab = await chrome.tabs.get(activeAiTabId);
+      if (tab) {
+        agentTargetTabId = tab.id;
+        persistAgentContext();
+        return tab;
+      }
+    } catch (e) {}
+  }
+
   if (agentTargetTabId !== null) {
     try {
       return await chrome.tabs.get(agentTargetTabId);
@@ -353,19 +366,6 @@ async function getAgentTab() {
         persistAgentContext();
       }
     }
-  }
-
-  // Fallback to dedicated AI agent tab
-  const activeAiTabId = await getActiveTabId();
-  if (activeAiTabId !== null) {
-    try {
-      const tab = await chrome.tabs.get(activeAiTabId);
-      if (tab) {
-        agentTargetTabId = tab.id;
-        persistAgentContext();
-        return tab;
-      }
-    } catch (e) {}
   }
 
   // Fallback to the active tab in the current focused window
@@ -1999,22 +1999,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // ─── Extension install ───
 chrome.runtime.onInstalled.addListener(async (details) => {
-  if (details.reason === "install") {
-    chrome.storage.local.set({ mcpRunning: false, mcpPort: null, agentConnected: false, autoStart: false });
-  } else {
-    await restoreAgentContext();
-  }
-  console.log(`[Browser MCP X] Extension ${details.reason}. MCP server ready to start.`);
+  await restoreAgentContext();
+  await startServer().catch(() => {});
+  console.log(`[Browser MCP X] Extension ${details.reason}. MCP server auto-started.`);
 });
 
 // Restore running state when Chrome wakes/restarts the MV3 service worker.
-// Without this, closing the popup can let Chrome suspend the worker and lose
-// the in-memory `isRunning` flag, causing offscreen reconnect logic to stop.
 chrome.runtime.onStartup.addListener(async () => {
   await restoreAgentContext();
-  const stored = await chrome.storage.local.get(["mcpRunning"]);
-  if (stored.mcpRunning) await startServer();
+  await startServer().catch(() => {});
 });
+
+// Auto-start on worker load
+startServer().catch(() => {});
 
 chrome.runtime.onSuspend.addListener(() => {
   // Do not stop the offscreen document here. It owns the persistent WebSocket.
