@@ -1884,10 +1884,7 @@ async function ensureOffscreenDocument() {
   try {
     await chrome.offscreen.createDocument({
       url: "offscreen.html",
-      // Chrome MV3 offscreen reasons do not include WEB_SOCKETS.
-      // WORKERS is the closest valid reason for a persistent offscreen
-      // context that owns the relay WebSocket client.
-      reasons: ["WORKERS"],
+      reasons: ["BLOB_PARSING"],
       justification: "Persistent WebSocket client for MCP browser control relay"
     });
   } catch (e) {
@@ -1944,9 +1941,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === "CLIENT_CONNECTED") {
+    isRunning = true;
     connectedAgent = msg.clientId;
     wsClients.add(msg.clientId);
-    chrome.storage.local.set({ agentConnected: true });
+    chrome.storage.local.set({ mcpRunning: true, agentConnected: true });
     chrome.action.setBadgeText({ text: "ON" });
     chrome.action.setBadgeBackgroundColor({ color: "#52B788" });
     restoreAgentContext();
@@ -1968,11 +1966,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === "GET_STATUS") {
     Promise.all([
-      chrome.storage.local.get(["mcpRunning"]),
+      chrome.storage.local.get(["mcpRunning", "agentConnected"]),
       chrome.offscreen.hasDocument().catch(() => false)
     ]).then(([stored, hasOffscreen]) => {
-      const running = Boolean(isRunning || stored.mcpRunning || hasOffscreen);
-      sendResponse({ running, port: MCP_PORT, clients: wsClients.size, hasOffscreen });
+      const running = Boolean(isRunning || stored.mcpRunning || stored.agentConnected || hasOffscreen);
+      sendResponse({ running, port: MCP_PORT, clients: wsClients.size || (stored.agentConnected ? 1 : 0), hasOffscreen });
     });
     return true;
   }
