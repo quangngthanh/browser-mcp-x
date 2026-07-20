@@ -1884,7 +1884,7 @@ async function ensureOffscreenDocument() {
   try {
     await chrome.offscreen.createDocument({
       url: "offscreen.html",
-      reasons: ["BLOB_PARSING"],
+      reasons: ["BLOBS"],
       justification: "Persistent WebSocket client for MCP browser control relay"
     });
   } catch (e) {
