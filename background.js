@@ -246,6 +246,59 @@ const MCP_TOOLS = [
 // after reconnect or service-worker restart — not wherever the user happens to be.
 let agentTargetTabId = null;
 let activeManipulatedTabIds = new Set();
+let aiTabId = null;
+let aiGroupId = null;
+
+async function getOrCreateAITab() {
+  // Check if existing aiTabId is valid
+  if (aiTabId !== null) {
+    try {
+      const tab = await chrome.tabs.get(aiTabId);
+      if (tab) return tab.id;
+    } catch (e) {
+      aiTabId = null;
+    }
+  }
+
+  // Create new tab for AI agent
+  const tab = await chrome.tabs.create({ active: false, url: "about:blank" });
+  aiTabId = tab.id;
+
+  // Manage Tab Group "🤖 AI Agent"
+  try {
+    let group = null;
+    if (aiGroupId !== null) {
+      try {
+        group = await chrome.tabGroups.get(aiGroupId);
+      } catch (e) {
+        aiGroupId = null;
+      }
+    }
+
+    if (!group) {
+      // Find existing group with title "🤖 AI Agent" if any
+      const groups = await chrome.tabGroups.query({ title: "🤖 AI Agent" });
+      if (groups.length > 0) {
+        aiGroupId = groups[0].id;
+      }
+    }
+
+    if (aiGroupId === null) {
+      aiGroupId = await chrome.tabs.group({ tabIds: [aiTabId] });
+      await chrome.tabGroups.update(aiGroupId, { title: "🤖 AI Agent", color: "purple" });
+    } else {
+      await chrome.tabs.group({ tabIds: [aiTabId], groupId: aiGroupId });
+    }
+  } catch (err) {
+    console.warn("[Browser MCP X] Tab grouping warning:", err);
+  }
+
+  return aiTabId;
+}
+
+async function getActiveTabId() {
+  return await getOrCreateAITab();
+}
 
 function persistAgentContext() {
   chrome.storage.local.set({
@@ -300,6 +353,19 @@ async function getAgentTab() {
         persistAgentContext();
       }
     }
+  }
+
+  // Fallback to dedicated AI agent tab
+  const activeAiTabId = await getActiveTabId();
+  if (activeAiTabId !== null) {
+    try {
+      const tab = await chrome.tabs.get(activeAiTabId);
+      if (tab) {
+        agentTargetTabId = tab.id;
+        persistAgentContext();
+        return tab;
+      }
+    } catch (e) {}
   }
 
   // Fallback to the active tab in the current focused window
