@@ -11,6 +11,9 @@ let ws = null;
 const RELAY_WS_URL = "ws://127.0.0.1:9274";
 let connected = false;
 
+// Auto-connect on load
+connectToRelay();
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "START_MCP_SERVER") {
     connectToRelay();
@@ -27,7 +30,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 function connectToRelay() {
-  if (ws && ws.readyState === WebSocket.OPEN) return;
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
 
   try {
     ws = new WebSocket(RELAY_WS_URL);
@@ -57,21 +60,10 @@ function connectToRelay() {
     };
 
     ws.onclose = () => {
-      console.log("[Browser MCP X] Disconnected from relay. Reconnecting in 2s...");
+      console.log("[Browser MCP X] Disconnected from relay. Reconnecting in 3s...");
       connected = false;
       chrome.runtime.sendMessage({ type: "CLIENT_DISCONNECTED", clientId: "extension" });
-      // Auto-reconnect with exponential backoff
-      let retryDelay = 2000;
-      const maxDelay = 30000;
-      const retry = () => {
-        chrome.runtime.sendMessage({ type: "GET_STATUS" }, (status) => {
-          if (status?.running) {
-            setTimeout(() => connectToRelay(), Math.min(retryDelay, maxDelay));
-            retryDelay = Math.min(retryDelay * 1.5, maxDelay);
-          }
-        });
-      };
-      retry();
+      setTimeout(connectToRelay, 3000);
     };
 
     ws.onerror = (err) => {
