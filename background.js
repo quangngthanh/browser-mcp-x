@@ -313,11 +313,8 @@ async function getOrCreateAITab() {
     }
 
     if (!group) {
-      // Find existing group with title "BrowserMCPX", "🤖 BrowserMCPX" or legacy "🤖 AI Agent"
-      let groups = await chrome.tabGroups.query({ title: "BrowserMCPX" });
-      if (groups.length === 0) groups = await chrome.tabGroups.query({ title: "🤖 BrowserMCPX" });
-      if (groups.length === 0) groups = await chrome.tabGroups.query({ title: "🤖 AI Agent" });
-      
+      // Find existing group with title "BrowserMCPX"
+      const groups = await chrome.tabGroups.query({ title: "BrowserMCPX" });
       if (groups.length > 0) {
         aiGroupId = groups[0].id;
         group = groups[0];
@@ -407,7 +404,7 @@ async function restoreAgentContext() {
 }
 
 async function getAgentTab() {
-  // Always default to dedicated AI agent tab in "🤖 BrowserMCPX" tab group
+  // Always default to dedicated AI agent tab in "BrowserMCPX" tab group
   const activeAiTabId = await getActiveTabId();
   if (activeAiTabId !== null) {
     try {
