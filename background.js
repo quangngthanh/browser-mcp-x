@@ -301,11 +301,7 @@ async function getOrCreateAITab() {
     }
   }
 
-  // Create new tab for AI agent
-  const tab = await chrome.tabs.create({ active: false, url: "about:blank" });
-  aiTabId = tab.id;
-
-  // Manage Tab Group "🤖 BrowserMCPX"
+  // Look for any existing BrowserMCPX tab group in Chrome
   try {
     let group = null;
     if (aiGroupId !== null) {
@@ -317,16 +313,34 @@ async function getOrCreateAITab() {
     }
 
     if (!group) {
-      // Find existing group with title "🤖 BrowserMCPX" or legacy "🤖 AI Agent" if any
-      let groups = await chrome.tabGroups.query({ title: "🤖 BrowserMCPX" });
-      if (groups.length === 0) {
-        groups = await chrome.tabGroups.query({ title: "🤖 AI Agent" });
-      }
+      // Find existing group with title "BrowserMCPX", "🤖 BrowserMCPX" or legacy "🤖 AI Agent"
+      let groups = await chrome.tabGroups.query({ title: "BrowserMCPX" });
+      if (groups.length === 0) groups = await chrome.tabGroups.query({ title: "🤖 BrowserMCPX" });
+      if (groups.length === 0) groups = await chrome.tabGroups.query({ title: "🤖 AI Agent" });
+      
       if (groups.length > 0) {
         aiGroupId = groups[0].id;
+        group = groups[0];
       }
     }
 
+    // If a tab group already exists, check if it has tabs we can reuse
+    if (aiGroupId !== null) {
+      const groupTabs = await chrome.tabs.query({ groupId: aiGroupId });
+      if (groupTabs.length > 0) {
+        aiTabId = groupTabs[0].id;
+        persistAgentContext();
+        return aiTabId;
+      }
+    }
+  } catch (err) {}
+
+  // Create new tab for AI agent
+  const tab = await chrome.tabs.create({ active: false, url: "about:blank" });
+  aiTabId = tab.id;
+
+  // Assign tab to the single "BrowserMCPX" Tab Group
+  try {
     if (aiGroupId === null) {
       aiGroupId = await chrome.tabs.group({ tabIds: [aiTabId] });
       await chrome.tabGroups.update(aiGroupId, { title: "BrowserMCPX", color: "purple" });
@@ -338,6 +352,7 @@ async function getOrCreateAITab() {
     console.warn("[Browser MCP X] Tab grouping warning:", err);
   }
 
+  persistAgentContext();
   return aiTabId;
 }
 
@@ -348,18 +363,36 @@ async function getActiveTabId() {
 function persistAgentContext() {
   chrome.storage.local.set({
     agentTargetTabId,
-    activeManipulatedTabIds: Array.from(activeManipulatedTabIds)
+    activeManipulatedTabIds: Array.from(activeManipulatedTabIds),
+    aiTabId,
+    aiGroupId
   });
 }
 
 async function restoreAgentContext() {
-  const stored = await chrome.storage.local.get(["agentTargetTabId", "activeManipulatedTabIds"]);
+  const stored = await chrome.storage.local.get(["agentTargetTabId", "activeManipulatedTabIds", "aiTabId", "aiGroupId"]);
   if (stored.agentTargetTabId != null) {
     try {
       await chrome.tabs.get(stored.agentTargetTabId);
       agentTargetTabId = stored.agentTargetTabId;
     } catch (e) {
       agentTargetTabId = null;
+    }
+  }
+  if (stored.aiTabId != null) {
+    try {
+      await chrome.tabs.get(stored.aiTabId);
+      aiTabId = stored.aiTabId;
+    } catch (e) {
+      aiTabId = null;
+    }
+  }
+  if (stored.aiGroupId != null) {
+    try {
+      await chrome.tabGroups.get(stored.aiGroupId);
+      aiGroupId = stored.aiGroupId;
+    } catch (e) {
+      aiGroupId = null;
     }
   }
   if (Array.isArray(stored.activeManipulatedTabIds)) {
@@ -1291,6 +1324,11 @@ async function executeTool(toolName, args, overrideTabId = null) {
       } else {
         const windowId = tab ? tab.windowId : undefined;
         newTab = await chrome.tabs.create({ windowId, url, active });
+      }
+      if (!args.newWindow && aiGroupId !== null) {
+        try {
+          await chrome.tabs.group({ tabIds: [newTab.id], groupId: aiGroupId });
+        } catch (e) {}
       }
       if (args.url) await waitForTabLoad(newTab.id);
       return { content: [{ type: "text", text: `Created tab ${newTab.id} with URL: ${url}${args.newWindow ? " (new window)" : ""}` }] };
