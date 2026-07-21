@@ -166,8 +166,49 @@ const MCP_TOOLS = [
   },
   {
     name: "get_network_requests",
-    description: "Capture recent network requests from the active tab (URL, method, status, type)",
-    inputSchema: { type: "object", properties: { filter: { type: "string", default: "" } } }
+    description: "Capture recent network requests from the active tab (URL, method, status, type, headers, payload)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filter: { type: "string", default: "" },
+        type: { type: "string", enum: ["all", "xmlhttprequest", "fetch", "script", "main_frame", "sub_frame"], default: "all" },
+        limit: { type: "number", default: 50 },
+        includeHeaders: { type: "boolean", default: true }
+      }
+    }
+  },
+  {
+    name: "get_api_requests",
+    description: "Capture API calls (XHR/Fetch) with full HTTP headers, Auth Tokens, parameters, and request body payloads for direct API re-play.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filter: { type: "string", default: "" },
+        limit: { type: "number", default: 20 }
+      }
+    }
+  },
+  {
+    name: "get_curl_command",
+    description: "Generate a copy-pasteable cURL command for a captured network request (including auth headers and payload) to execute directly without UI.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        urlPattern: { type: "string" },
+        requestIndex: { type: "number", default: 0 }
+      },
+      required: ["urlPattern"]
+    }
+  },
+  {
+    name: "export_api_session",
+    description: "Export authentication cookies, bearer tokens, and headers for a domain. Returns JSON + ready-to-run Python requests script to call APIs headlessly.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        domain: { type: "string", default: "" }
+      }
+    }
   },
   // ─── Phase 1: Quick Wins ───
   {
@@ -264,7 +305,7 @@ async function getOrCreateAITab() {
   const tab = await chrome.tabs.create({ active: false, url: "about:blank" });
   aiTabId = tab.id;
 
-  // Manage Tab Group "🤖 AI Agent"
+  // Manage Tab Group "🤖 BrowserMCPX"
   try {
     let group = null;
     if (aiGroupId !== null) {
@@ -276,8 +317,11 @@ async function getOrCreateAITab() {
     }
 
     if (!group) {
-      // Find existing group with title "🤖 AI Agent" if any
-      const groups = await chrome.tabGroups.query({ title: "🤖 AI Agent" });
+      // Find existing group with title "🤖 BrowserMCPX" or legacy "🤖 AI Agent" if any
+      let groups = await chrome.tabGroups.query({ title: "🤖 BrowserMCPX" });
+      if (groups.length === 0) {
+        groups = await chrome.tabGroups.query({ title: "🤖 AI Agent" });
+      }
       if (groups.length > 0) {
         aiGroupId = groups[0].id;
       }
@@ -285,9 +329,10 @@ async function getOrCreateAITab() {
 
     if (aiGroupId === null) {
       aiGroupId = await chrome.tabs.group({ tabIds: [aiTabId] });
-      await chrome.tabGroups.update(aiGroupId, { title: "🤖 AI Agent", color: "purple" });
+      await chrome.tabGroups.update(aiGroupId, { title: "BrowserMCPX", color: "purple" });
     } else {
       await chrome.tabs.group({ tabIds: [aiTabId], groupId: aiGroupId });
+      await chrome.tabGroups.update(aiGroupId, { title: "BrowserMCPX" });
     }
   } catch (err) {
     console.warn("[Browser MCP X] Tab grouping warning:", err);
@@ -329,7 +374,7 @@ async function restoreAgentContext() {
 }
 
 async function getAgentTab() {
-  // Always default to dedicated AI agent tab in "🤖 AI Agent" tab group
+  // Always default to dedicated AI agent tab in "🤖 BrowserMCPX" tab group
   const activeAiTabId = await getActiveTabId();
   if (activeAiTabId !== null) {
     try {
@@ -383,6 +428,101 @@ let recordingState = { isRecording: false, actions: [], recordingTabId: null };
 // ─── Network/Console Capture State ───
 let consoleLogs = [];
 let networkRequests = [];
+const CAPTURED_REQUESTS_MAX = 200;
+let capturedRequests = [];
+const pendingRequestsMap = new Map();
+
+if (chrome.webRequest && chrome.webRequest.onBeforeRequest) {
+  try {
+    chrome.webRequest.onBeforeRequest.addListener(
+      (details) => {
+        if (details.tabId >= 0) {
+          let bodyStr = null;
+          if (details.requestBody) {
+            if (details.requestBody.formData) {
+              bodyStr = JSON.stringify(details.requestBody.formData);
+            } else if (details.requestBody.raw && details.requestBody.raw.length > 0) {
+              try {
+                const dec = new TextDecoder("utf-8");
+                bodyStr = details.requestBody.raw.map(b => b.bytes ? dec.decode(b.bytes) : "").join("");
+              } catch (e) {}
+            }
+          }
+          pendingRequestsMap.set(details.requestId, {
+            id: details.requestId,
+            url: details.url,
+            method: details.method,
+            type: details.type,
+            tabId: details.tabId,
+            timestamp: new Date(details.timeStamp).toISOString(),
+            requestBody: bodyStr,
+            headers: {},
+            responseHeaders: {},
+            statusCode: null
+          });
+        }
+      },
+      { urls: ["<all_urls>"] },
+      ["requestBody"]
+    );
+
+    chrome.webRequest.onBeforeSendHeaders.addListener(
+      (details) => {
+        const req = pendingRequestsMap.get(details.requestId);
+        if (req && details.requestHeaders) {
+          const headersObj = {};
+          for (const h of details.requestHeaders) {
+            headersObj[h.name] = h.value;
+          }
+          req.headers = headersObj;
+        }
+      },
+      { urls: ["<all_urls>"] },
+      ["requestHeaders", "extraHeaders"]
+    );
+
+    chrome.webRequest.onCompleted.addListener(
+      (details) => {
+        const req = pendingRequestsMap.get(details.requestId);
+        if (req) {
+          req.statusCode = details.statusCode || 200;
+          if (details.responseHeaders) {
+            const respHeadersObj = {};
+            for (const h of details.responseHeaders) {
+              respHeadersObj[h.name] = h.value;
+            }
+            req.responseHeaders = respHeadersObj;
+          }
+          pendingRequestsMap.delete(details.requestId);
+
+          capturedRequests.push(req);
+          if (capturedRequests.length > CAPTURED_REQUESTS_MAX) {
+            capturedRequests.shift();
+          }
+        }
+      },
+      { urls: ["<all_urls>"] },
+      ["responseHeaders", "extraHeaders"]
+    );
+
+    chrome.webRequest.onErrorOccurred.addListener(
+      (details) => {
+        const req = pendingRequestsMap.get(details.requestId);
+        if (req) {
+          req.statusCode = 0;
+          pendingRequestsMap.delete(details.requestId);
+          capturedRequests.push(req);
+          if (capturedRequests.length > CAPTURED_REQUESTS_MAX) {
+            capturedRequests.shift();
+          }
+        }
+      },
+      { urls: ["<all_urls>"] }
+    );
+  } catch (err) {
+    console.warn("[Browser MCP X] webRequest initialization warning:", err);
+  }
+}
 
 // ─── MCP Protocol Handler ───
 async function handleMcpRequest(message) {
@@ -1199,24 +1339,199 @@ async function executeTool(toolName, args, overrideTabId = null) {
     }
 
     case "get_network_requests": {
-      const filterStr = args.filter || "";
-      // Reads recorded resource timing entries via the Performance API;
-      // does not use chrome.debugger.
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: (filterStr) => {
-          const entries = performance.getEntriesByType("resource");
-          const requests = entries.map(e => ({
-            url: e.name,
-            type: e.initiatorType,
-            duration: Math.round(e.duration),
-            size: e.transferSize || 0
-          })).filter(r => !filterStr || r.url.includes(filterStr));
-          return requests.slice(-50);
-        },
-        args: [filterStr]
+      const filterStr = (args.filter || "").toLowerCase();
+      const reqType = args.type || "all";
+      const limit = args.limit || 50;
+      const includeHeaders = args.includeHeaders !== false;
+
+      let filtered = capturedRequests.filter(r => {
+        const matchesUrl = !filterStr || r.url.toLowerCase().includes(filterStr);
+        const matchesType = reqType === "all" || r.type === reqType;
+        return matchesUrl && matchesType;
       });
-      return { content: [{ type: "text", text: JSON.stringify(results[0]?.result || [], null, 2) }] };
+
+      if (filtered.length === 0) {
+        // Fallback to Performance API if no captured requests yet
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (filterStr) => {
+            const entries = performance.getEntriesByType("resource");
+            return entries.map(e => ({
+              url: e.name,
+              type: e.initiatorType,
+              duration: Math.round(e.duration),
+              size: e.transferSize || 0
+            })).filter(r => !filterStr || r.url.toLowerCase().includes(filterStr));
+          },
+          args: [filterStr]
+        });
+        filtered = results[0]?.result || [];
+      } else {
+        filtered = filtered.slice(-limit).map(r => {
+          const item = {
+            id: r.id,
+            url: r.url,
+            method: r.method,
+            type: r.type,
+            statusCode: r.statusCode,
+            timestamp: r.timestamp
+          };
+          if (includeHeaders) {
+            item.headers = r.headers;
+            item.requestBody = r.requestBody;
+          }
+          return item;
+        });
+      }
+
+      return { content: [{ type: "text", text: JSON.stringify(filtered, null, 2) }] };
+    }
+
+    case "get_api_requests": {
+      const filterStr = (args.filter || "").toLowerCase();
+      const limit = args.limit || 20;
+
+      const apiRequests = capturedRequests.filter(r => {
+        const isApiType = r.type === "xmlhttprequest" || r.type === "fetch" || r.url.includes("/api/") || r.url.includes("/graphql") || r.url.includes("/v1/") || r.url.includes("/v2/");
+        const matchesFilter = !filterStr || r.url.toLowerCase().includes(filterStr);
+        return isApiType && matchesFilter;
+      }).slice(-limit).map(r => {
+        const authHeaders = {};
+        if (r.headers) {
+          for (const [k, v] of Object.entries(r.headers)) {
+            const lk = k.toLowerCase();
+            if (lk.includes("auth") || lk.includes("token") || lk.includes("cookie") || lk.includes("key") || lk.includes("csrf")) {
+              authHeaders[k] = v;
+            }
+          }
+        }
+        return {
+          id: r.id,
+          url: r.url,
+          method: r.method,
+          type: r.type,
+          statusCode: r.statusCode,
+          timestamp: r.timestamp,
+          authHeaders,
+          requestHeaders: r.headers,
+          requestBody: r.requestBody
+        };
+      });
+
+      return { content: [{ type: "text", text: JSON.stringify(apiRequests, null, 2) }] };
+    }
+
+    case "get_curl_command": {
+      const pattern = (args.urlPattern || "").toLowerCase();
+      const index = args.requestIndex || 0;
+
+      const matches = capturedRequests.filter(r => r.url.toLowerCase().includes(pattern));
+      if (matches.length === 0) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({ error: `No captured network requests matching URL pattern: "${args.urlPattern}"` }, null, 2)
+          }]
+        };
+      }
+
+      const req = matches[Math.min(index, matches.length - 1)];
+      let curl = `curl -X ${req.method} '${req.url}'`;
+
+      if (req.headers) {
+        for (const [key, value] of Object.entries(req.headers)) {
+          if (key.startsWith(":") || !value) continue;
+          const safeVal = String(value).replace(/'/g, "'\\''");
+          curl += ` \\\n  -H '${key}: ${safeVal}'`;
+        }
+      }
+
+      if (req.requestBody) {
+        const safeBody = String(req.requestBody).replace(/'/g, "'\\''");
+        curl += ` \\\n  --data-raw '${safeBody}'`;
+      }
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            url: req.url,
+            method: req.method,
+            curlCommand: curl
+          }, null, 2)
+        }]
+      };
+    }
+
+    case "export_api_session": {
+      let targetDomain = args.domain;
+      if (!targetDomain && tab && tab.url) {
+        try {
+          const urlObj = new URL(tab.url);
+          targetDomain = urlObj.hostname;
+        } catch (e) {
+          targetDomain = "";
+        }
+      }
+
+      let cookies = [];
+      if (targetDomain && chrome.cookies) {
+        try {
+          cookies = await chrome.cookies.getAll({ domain: targetDomain });
+        } catch (e) {
+          try {
+            if (tab && tab.url) cookies = await chrome.cookies.getAll({ url: tab.url });
+          } catch (err) {}
+        }
+      }
+
+      const capturedAuthHeaders = {};
+      const domainReqs = capturedRequests.filter(r => targetDomain && r.url.toLowerCase().includes(targetDomain.toLowerCase()));
+      for (const req of domainReqs) {
+        if (req.headers) {
+          for (const [k, v] of Object.entries(req.headers)) {
+            const lk = k.toLowerCase();
+            if (lk.includes("auth") || lk.includes("token") || lk.includes("bearer") || lk.includes("csrf") || lk.includes("api-key")) {
+              capturedAuthHeaders[k] = v;
+            }
+          }
+        }
+      }
+
+      const cookieDict = {};
+      for (const c of cookies) {
+        cookieDict[c.name] = c.value;
+      }
+
+      const pythonCode = `import requests
+
+session = requests.Session()
+
+# Cookies
+cookies = ${JSON.stringify(cookieDict, null, 4)}
+session.cookies.update(cookies)
+
+# Auth & Custom Headers
+headers = ${JSON.stringify(capturedAuthHeaders, null, 4)}
+session.headers.update(headers)
+
+# Example API Call:
+# response = session.get("${(tab && tab.url) ? tab.url : "https://" + targetDomain}")
+# print(response.status_code, response.text)
+`;
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            domain: targetDomain,
+            cookieCount: cookies.length,
+            cookies: cookies.map(c => ({ name: c.name, value: c.value, domain: c.domain, path: c.path, secure: c.secure, httpOnly: c.httpOnly })),
+            authHeaders: capturedAuthHeaders,
+            pythonSnippet: pythonCode
+          }, null, 2)
+        }]
+      };
     }
 
     // ─── Phase 1: Quick Wins ───

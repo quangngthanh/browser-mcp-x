@@ -100,7 +100,10 @@ Click the Browser MCP X extension icon → **Start**
 | `create_tab` | Open a new tab with optional URL |
 | `batch_execute` | Run multiple tool calls in sequence |
 | `get_console_logs` | Capture console logs (errors, warnings) |
-| `get_network_requests` | Capture network requests (URL, method, status) |
+| `get_network_requests` | Capture network requests with full headers & payloads |
+| `get_api_requests` | Capture API calls (XHR/Fetch) with Auth Tokens & Payloads |
+| `get_curl_command` | Generate copy-pasteable cURL command for direct API execution |
+| `export_api_session` | Export session cookies, auth headers & Python snippet for headless API calls |
 
 ### Pro Tools
 | Tool | Description |

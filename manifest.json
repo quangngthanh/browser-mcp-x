@@ -11,7 +11,9 @@
     "storage",
     "debugger",
     "offscreen",
-    "windows"
+    "windows",
+    "webRequest",
+    "cookies"
   ],
   "host_permissions": ["<all_urls>"],
   "background": {
