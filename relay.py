@@ -270,7 +270,10 @@ STATIC_TOOLS = [
     {"name": "create_tab", "description": "Create a new tab with an optional URL", "inputSchema": {"type": "object", "properties": {"url": {"type": "string"}, "active": {"type": "boolean", "default": True}}}},
     {"name": "batch_execute", "description": "Execute multiple tool calls in sequence on a specific tab. Pass an array of {tool, args} objects.", "inputSchema": {"type": "object", "properties": {"tabId": {"type": "number"}, "steps": {"type": "array"}}, "required": ["steps"]}},
     {"name": "get_console_logs", "description": "Capture console logs from the active tab (errors, warnings, logs)", "inputSchema": {"type": "object", "properties": {"level": {"type": "string", "enum": ["error", "warn", "log", "all"], "default": "all"}}}},
-    {"name": "get_network_requests", "description": "Capture recent network requests from the active tab (URL, method, status, type)", "inputSchema": {"type": "object", "properties": {"filter": {"type": "string", "default": ""}}}},
+    {"name": "get_network_requests", "description": "Capture recent network requests from the active tab (URL, method, status, type, headers, payload)", "inputSchema": {"type": "object", "properties": {"filter": {"type": "string", "default": ""}, "type": {"type": "string", "enum": ["all", "xmlhttprequest", "fetch", "script", "main_frame", "sub_frame"], "default": "all"}, "limit": {"type": "number", "default": 50}, "includeHeaders": {"type": "boolean", "default": True}}}},
+    {"name": "get_api_requests", "description": "Capture API calls (XHR/Fetch) with full HTTP headers, Auth Tokens, parameters, and request body payloads for direct API re-play.", "inputSchema": {"type": "object", "properties": {"filter": {"type": "string", "default": ""}, "limit": {"type": "number", "default": 20}}}},
+    {"name": "get_curl_command", "description": "Generate a copy-pasteable cURL command for a captured network request (including auth headers and payload) to execute directly without UI.", "inputSchema": {"type": "object", "properties": {"urlPattern": {"type": "string"}, "requestIndex": {"type": "number", "default": 0}}, "required": ["urlPattern"]}},
+    {"name": "export_api_session", "description": "Export authentication cookies, bearer tokens, and headers for a domain. Returns JSON + ready-to-run Python requests script to call APIs headlessly.", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string", "default": ""}}}},
     {"name": "highlight", "description": "Visually highlight an element with a colored border. Pass a CSS selector. Pass duration=0 to remove all highlights.", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string"}, "color": {"type": "string", "default": "#E55934"}, "duration": {"type": "number", "default": 3000}}, "required": ["selector"]}},
     {"name": "wait_for_element", "description": "Wait until an element matching the CSS selector appears on the page. Auto-resolves when found or after timeout.", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string"}, "timeout": {"type": "number", "default": 10000}, "visible": {"type": "boolean", "default": True}}, "required": ["selector"]}},
     {"name": "get_interactive_elements", "description": "List all interactive elements (buttons, links, inputs, selects) with numeric IDs. Use the returned ID with click_by_id or type_by_id.", "inputSchema": {"type": "object", "properties": {"filter": {"type": "string", "enum": ["all", "buttons", "links", "inputs", "forms"], "default": "all"}}}},
@@ -470,7 +473,7 @@ class StatusHandler(BaseHTTPRequestHandler):
                 "start_recording", "stop_recording", "playback",
                 # Debugging
                 "evaluate", "wait", "press_key", "download_image", "get_console_logs",
-                "get_network_requests", "handle_dialog",
+                "get_network_requests", "get_api_requests", "get_curl_command", "export_api_session", "handle_dialog",
                 # Smart interaction
                 "highlight", "wait_for_element", "get_interactive_elements",
                 "click_by_id", "type_by_id", "click_text", "hover",

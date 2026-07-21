@@ -11,11 +11,11 @@ Browser MCP X turns Chrome into an MCP server (Model Context Protocol). Connect 
 3. **Connect AI agent** — Add MCP config, done
 4. **Click Start** — Browser MCP X icon → Start
 
-### 37 MCP Tools
+### 40 MCP Tools
 
 **Core:** navigate, screenshot, get_dom, snapshot, click, type_text, select_option, extract_text, scroll, get_tabs, switch_tab, close_tab, evaluate, get_page_info, fill_form, wait, press_key, get_links
 
-**Advanced:** start_recording, stop_recording, playback, detect_forms, auto_fill_form, create_tab, batch_execute, get_console_logs, get_network_requests
+**Advanced:** start_recording, stop_recording, playback, detect_forms, auto_fill_form, create_tab, batch_execute, get_console_logs, get_network_requests, get_api_requests, get_curl_command, export_api_session
 
 **Pro:** highlight, wait_for_element, get_interactive_elements, click_by_id, type_by_id, click_text, hover, drag_and_drop, handle_dialog, get_markdown
 
