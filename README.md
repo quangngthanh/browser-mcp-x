@@ -1,11 +1,11 @@
 # Browser MCP X — AI Browser Control via MCP
 
-> Turn Chrome into an MCP server. Let AI agents control your browser. Zero setup. 37 tools. No npm. No dependencies.
+> Turn Chrome into an MCP server. Let AI agents control your browser. Zero setup. 44 tools. No npm. No dependencies.
 
 [![Chrome MV3](https://img.shields.io/badge/Chrome-MV3-4285F4)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 [![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero-success)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/licenses/MIT)
-[![Tools: 37](https://img.shields.io/badge/MCP_Tools-37-blue)]()
+[![Tools: 44](https://img.shields.io/badge/MCP_Tools-44-blue)]()
 
 ## Why Browser MCP X?
 
@@ -14,7 +14,7 @@
 | **Setup** | 1 click + `python3 relay.py` | `npm install -g` + extension | `npm install playwright` + browser |
 | **Dependencies** | Python 3 (pre-installed) | Node.js + npm | Node.js + Playwright + browser binaries |
 | **User session** | ✅ Uses your logged-in tabs | ✅ Uses your logged-in tabs | ❌ Clean browser, no logins |
-| **Tools** | **37** (navigate, click, type, snapshot, select_option, record, batch, forms, network, console, markdown, highlight, hover, drag-drop, dialogs, interactive elements, text-click...) | 20+ | ~10 |
+| **Tools** | **44** (navigate, click, type, snapshot, computer, file_upload, resize_window, select_option, record, batch, forms, network, console, markdown, highlight, hover, drag-drop, dialogs, interactive elements, text-click...) | 20+ | ~10 |
 | **Size** | ~50KB extension + 13KB relay | ~500KB extension + npm package | 300MB+ |
 | **Recording/Playback** | ✅ Built-in | ❌ | ❌ |
 | **Batch Execute** | ✅ Built-in | ❌ | ❌ |
@@ -65,7 +65,7 @@ hermes mcp add browser-mcp-x --command "python3 /path/to/relay.py"
 
 Click the Browser MCP X extension icon → **Start**
 
-## 37 MCP Tools
+## 44 MCP Tools
 
 ### Core Tools (Free)
 | Tool | Description |
@@ -118,6 +118,9 @@ Click the Browser MCP X extension icon → **Start**
 | `drag_and_drop` | Drag element A onto element B |
 | `handle_dialog` | Accept/dismiss alert/confirm/prompt dialogs |
 | `get_markdown` | Export page content as structured Markdown |
+| `file_upload` | Upload a file to `<input type="file">` via base64 |
+| `resize_window` | Resize the browser window |
+| `computer` | Coordinate-based click/scroll/type/key + screenshot after each action |
 
 ## Architecture
 
