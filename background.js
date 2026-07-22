@@ -969,9 +969,7 @@ async function executeTool(toolName, args, overrideTabId = null) {
       const tabList = tabs.map(t => {
         const entry = { id: t.id, title: t.title, url: t.url, active: t.active };
         if (t.groupId >= 0) {
-          entry.groupId = t.groupId;
           entry.groupTitle = groupMap[t.groupId]?.title || "";
-          entry.groupColor = groupMap[t.groupId]?.color || "";
         }
         return entry;
       });
