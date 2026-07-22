@@ -32,13 +32,7 @@ const MCP_TOOLS = [
   {
     name: "screenshot",
     description: "Take a screenshot of the active tab",
-    inputSchema: {
-      type: "object",
-      properties: {
-        format: { type: "string", enum: ["jpeg", "png"], default: "jpeg" },
-        quality: { type: "number", description: "JPEG quality 0-100 (ignored for png)", default: 75 }
-      }
-    }
+    inputSchema: { type: "object", properties: {} }
   },
   {
     name: "get_dom",
@@ -278,6 +272,55 @@ const MCP_TOOLS = [
         index: { type: "number" }
       },
       required: ["selector"]
+    }
+  },
+  // ─── New tools ───
+  {
+    name: "file_upload",
+    description: "Upload a file to an <input type=\"file\"> element. Provide the file content as base64 and the filename.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        selector: { type: "string", description: "CSS selector for the file input element" },
+        filename: { type: "string", description: "Filename (e.g. 'document.pdf')" },
+        mimeType: { type: "string", description: "MIME type (e.g. 'image/jpeg')", default: "application/octet-stream" },
+        base64Data: { type: "string", description: "Base64-encoded file content" }
+      },
+      required: ["selector", "filename", "base64Data"]
+    }
+  },
+  {
+    name: "resize_window",
+    description: "Resize the current browser window to specified dimensions",
+    inputSchema: {
+      type: "object",
+      properties: {
+        width: { type: "number", description: "Window width in pixels" },
+        height: { type: "number", description: "Window height in pixels" },
+        left: { type: "number", description: "Window left position in pixels" },
+        top: { type: "number", description: "Window top position in pixels" }
+      }
+    }
+  },
+  {
+    name: "computer",
+    description: "Computer-use style interaction: screenshot, coordinate-based click/scroll, type text, or press keys. Returns a screenshot after each action for visual confirmation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["left_click", "right_click", "middle_click", "double_click", "mouse_move", "type", "key", "scroll"],
+          description: "Action to perform"
+        },
+        x: { type: "number", description: "X coordinate in pixels (for click/move/scroll actions)" },
+        y: { type: "number", description: "Y coordinate in pixels (for click/move/scroll actions)" },
+        text: { type: "string", description: "Text to type (for 'type' action)" },
+        key: { type: "string", description: "Key combo to press, e.g. 'Enter', 'Control+a' (for 'key' action)" },
+        direction: { type: "string", enum: ["up", "down", "left", "right"], description: "Scroll direction (for 'scroll' action)", default: "down" },
+        amount: { type: "number", description: "Scroll amount in pixels (for 'scroll' action)", default: 300 }
+      },
+      required: ["action"]
     }
   }
 ];
@@ -697,14 +740,12 @@ async function executeTool(toolName, args, overrideTabId = null) {
     }
 
     case "screenshot": {
-      const format = args.format === "png" ? "png" : "jpeg";
-      const quality = typeof args.quality === "number" ? args.quality : 75;
       try {
-        const dataUrl = await captureWithDebugger(tab.id, format, quality);
+        const dataUrl = await captureWithDebugger(tab.id);
         return {
           content: [
             { type: "text", text: "Screenshot captured" },
-            { type: "image", data: dataUrl.split(",")[1], mimeType: `image/${format}` }
+            { type: "image", data: dataUrl.split(",")[1], mimeType: "image/jpeg" }
           ]
         };
       } catch (e) {
@@ -2092,6 +2133,146 @@ session.headers.update(headers)
       });
       const payload = results[0]?.result || { ok: false, error: "no result" };
       return { content: [{ type: "text", text: JSON.stringify(payload) }] };
+    }
+
+    case "file_upload": {
+      const { selector, filename, mimeType = "application/octet-stream", base64Data } = args;
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: "MAIN",
+        func: (sel, fname, mime, b64) => {
+          const input = document.querySelector(sel);
+          if (!input || input.type !== "file") return `File input not found: ${sel}`;
+          try {
+            const byteCharacters = atob(b64);
+            const byteArray = new Uint8Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteArray[i] = byteCharacters.charCodeAt(i);
+            }
+            const blob = new Blob([byteArray], { type: mime });
+            const file = new File([blob], fname, { type: mime, lastModified: Date.now() });
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            input.files = dt.files;
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            return `Uploaded "${fname}" (${byteArray.length} bytes) to ${sel}`;
+          } catch (e) {
+            return `Upload failed: ${e.message}`;
+          }
+        },
+        args: [selector, filename, mimeType, base64Data]
+      });
+      return { content: [{ type: "text", text: results[0]?.result }] };
+    }
+
+    case "resize_window": {
+      const { width, height, left, top } = args;
+      const currentTab = await chrome.tabs.get(tab.id);
+      const updateProps = { state: "normal" };
+      if (width != null) updateProps.width = Math.round(width);
+      if (height != null) updateProps.height = Math.round(height);
+      if (left != null) updateProps.left = Math.round(left);
+      if (top != null) updateProps.top = Math.round(top);
+      await chrome.windows.update(currentTab.windowId, updateProps);
+      const updated = await chrome.windows.get(currentTab.windowId);
+      return { content: [{ type: "text", text: `Window resized to ${updated.width}x${updated.height} at (${updated.left}, ${updated.top})` }] };
+    }
+
+    case "computer": {
+      const { action, x, y, text: typeText, key: keyCombo, direction = "down", amount = 300 } = args;
+      const cdpTarget = { tabId: tab.id };
+
+      if (action === "type") {
+        await chrome.debugger.detach(cdpTarget).catch(() => {});
+        await withTimeout(chrome.debugger.attach(cdpTarget, "1.3"), 5000, "debugger.attach");
+        try {
+          await chrome.debugger.sendCommand(cdpTarget, "Input.insertText", { text: typeText || "" });
+        } finally {
+          await chrome.debugger.detach(cdpTarget).catch(() => {});
+        }
+        const dataUrl = await captureWithDebugger(tab.id);
+        return {
+          content: [
+            { type: "text", text: `Typed: "${typeText}"` },
+            { type: "image", data: dataUrl.split(",")[1], mimeType: "image/jpeg" }
+          ]
+        };
+      }
+
+      if (action === "key") {
+        const keyResult = await executeTool("press_key", { key: keyCombo }, tab.id);
+        const dataUrl = await captureWithDebugger(tab.id);
+        return {
+          content: [
+            ...(keyResult.content || []),
+            { type: "image", data: dataUrl.split(",")[1], mimeType: "image/jpeg" }
+          ]
+        };
+      }
+
+      if (action === "scroll") {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (px, py, dir, amt) => {
+            const delta = dir === "up" || dir === "left" ? -amt : amt;
+            const el = document.elementFromPoint(px, py) || document.scrollingElement || document.body;
+            if (dir === "left" || dir === "right") {
+              el.scrollLeft += delta;
+              if (el === document.body) window.scrollBy(delta, 0);
+            } else {
+              el.scrollTop += delta;
+              if (el === document.body) window.scrollBy(0, delta);
+            }
+          },
+          args: [x || 0, y || 0, direction, amount]
+        });
+        const dataUrl = await captureWithDebugger(tab.id);
+        return {
+          content: [
+            { type: "text", text: `Scrolled ${direction} by ${amount}px at (${x}, ${y})` },
+            { type: "image", data: dataUrl.split(",")[1], mimeType: "image/jpeg" }
+          ]
+        };
+      }
+
+      // Click / mouse_move actions via CDP
+      const buttonMap = { left_click: "left", right_click: "right", middle_click: "middle", double_click: "left", mouse_move: "none" };
+      const button = buttonMap[action] || "left";
+      const clickCount = action === "double_click" ? 2 : (action === "mouse_move" ? 0 : 1);
+
+      const dprResult = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => window.devicePixelRatio || 1
+      });
+      const dpr = dprResult[0]?.result || 1;
+      const sx = Math.round((x || 0) * dpr);
+      const sy = Math.round((y || 0) * dpr);
+
+      await chrome.debugger.detach(cdpTarget).catch(() => {});
+      await withTimeout(chrome.debugger.attach(cdpTarget, "1.3"), 5000, "debugger.attach");
+      try {
+        const base = { x: sx, y: sy, button, clickCount, modifiers: 0 };
+        await chrome.debugger.sendCommand(cdpTarget, "Input.dispatchMouseEvent", { type: "mouseMoved", ...base, button: "none", clickCount: 0 });
+        if (action !== "mouse_move") {
+          await chrome.debugger.sendCommand(cdpTarget, "Input.dispatchMouseEvent", { type: "mousePressed", ...base });
+          if (action === "double_click") {
+            await chrome.debugger.sendCommand(cdpTarget, "Input.dispatchMouseEvent", { type: "mouseReleased", ...base });
+            await chrome.debugger.sendCommand(cdpTarget, "Input.dispatchMouseEvent", { type: "mousePressed", ...base });
+          }
+          await chrome.debugger.sendCommand(cdpTarget, "Input.dispatchMouseEvent", { type: "mouseReleased", ...base });
+        }
+      } finally {
+        await chrome.debugger.detach(cdpTarget).catch(() => {});
+      }
+
+      const dataUrl = await captureWithDebugger(tab.id);
+      return {
+        content: [
+          { type: "text", text: `${action} at (${x}, ${y})` },
+          { type: "image", data: dataUrl.split(",")[1], mimeType: "image/jpeg" }
+        ]
+      };
     }
 
     default:
