@@ -958,7 +958,23 @@ async function executeTool(toolName, args, overrideTabId = null) {
 
     case "get_tabs": {
       const tabs = await chrome.tabs.query({});
-      const tabList = tabs.map(t => ({ id: t.id, title: t.title, url: t.url, active: t.active }));
+      const groupIds = [...new Set(tabs.map(t => t.groupId).filter(id => id >= 0))];
+      const groupMap = {};
+      for (const gid of groupIds) {
+        try {
+          const g = await chrome.tabGroups.get(gid);
+          groupMap[gid] = { title: g.title, color: g.color };
+        } catch (e) {}
+      }
+      const tabList = tabs.map(t => {
+        const entry = { id: t.id, title: t.title, url: t.url, active: t.active };
+        if (t.groupId >= 0) {
+          entry.groupId = t.groupId;
+          entry.groupTitle = groupMap[t.groupId]?.title || "";
+          entry.groupColor = groupMap[t.groupId]?.color || "";
+        }
+        return entry;
+      });
       return { content: [{ type: "text", text: JSON.stringify(tabList, null, 2) }] };
     }
 
