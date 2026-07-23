@@ -334,66 +334,8 @@ let aiTabId = null;
 let aiGroupId = null;
 
 async function getOrCreateAITab() {
-  // Check if existing aiTabId is valid
-  if (aiTabId !== null) {
-    try {
-      const tab = await chrome.tabs.get(aiTabId);
-      if (tab) return tab.id;
-    } catch (e) {
-      aiTabId = null;
-    }
-  }
-
-  // Look for any existing BrowserMCPX tab group in Chrome
-  try {
-    let group = null;
-    if (aiGroupId !== null) {
-      try {
-        group = await chrome.tabGroups.get(aiGroupId);
-      } catch (e) {
-        aiGroupId = null;
-      }
-    }
-
-    if (!group) {
-      // Find existing group with title "BrowserMCPX"
-      const groups = await chrome.tabGroups.query({ title: "BrowserMCPX" });
-      if (groups.length > 0) {
-        aiGroupId = groups[0].id;
-        group = groups[0];
-      }
-    }
-
-    // If a tab group already exists, check if it has tabs we can reuse
-    if (aiGroupId !== null) {
-      const groupTabs = await chrome.tabs.query({ groupId: aiGroupId });
-      if (groupTabs.length > 0) {
-        aiTabId = groupTabs[0].id;
-        persistAgentContext();
-        return aiTabId;
-      }
-    }
-  } catch (err) {}
-
-  // Create new tab for AI agent
-  const tab = await chrome.tabs.create({ active: false, url: "about:blank" });
-  aiTabId = tab.id;
-
-  // Assign tab to the single "BrowserMCPX" Tab Group
-  try {
-    if (aiGroupId === null) {
-      aiGroupId = await chrome.tabs.group({ tabIds: [aiTabId] });
-      await chrome.tabGroups.update(aiGroupId, { title: "BrowserMCPX", color: "purple" });
-    } else {
-      await chrome.tabs.group({ tabIds: [aiTabId], groupId: aiGroupId });
-      await chrome.tabGroups.update(aiGroupId, { title: "BrowserMCPX" });
-    }
-  } catch (err) {
-    console.warn("[Browser MCP X] Tab grouping warning:", err);
-  }
-
-  persistAgentContext();
-  return aiTabId;
+  const tab = await getAgentTab();
+  return tab ? tab.id : null;
 }
 
 async function getActiveTabId() {
@@ -447,52 +389,96 @@ async function restoreAgentContext() {
 }
 
 async function getAgentTab() {
-  // Always default to dedicated AI agent tab in "BrowserMCPX" tab group
-  const activeAiTabId = await getActiveTabId();
-  if (activeAiTabId !== null) {
+  // 1. Resolve or find the "BrowserMCPX" tab group
+  let group = null;
+  if (aiGroupId !== null) {
     try {
-      const tab = await chrome.tabs.get(activeAiTabId);
-      if (tab) {
-        agentTargetTabId = tab.id;
-        persistAgentContext();
-        return tab;
-      }
-    } catch (e) {}
-  }
-
-  if (agentTargetTabId !== null) {
-    try {
-      return await chrome.tabs.get(agentTargetTabId);
+      group = await chrome.tabGroups.get(aiGroupId);
     } catch (e) {
-      agentTargetTabId = null;
-      persistAgentContext();
+      aiGroupId = null;
     }
   }
 
-  // Try to find a valid tab among those previously manipulated by the agent
-  if (activeManipulatedTabIds.size > 0) {
-    for (const tabId of activeManipulatedTabIds) {
-      try {
-        const tab = await chrome.tabs.get(tabId);
-        if (tab) {
-          agentTargetTabId = tab.id;
-          persistAgentContext();
-          return tab;
-        }
-      } catch (e) {
-        activeManipulatedTabIds.delete(tabId);
+  if (!group) {
+    try {
+      const groups = await chrome.tabGroups.query({ title: "BrowserMCPX" });
+      if (groups.length > 0) {
+        aiGroupId = groups[0].id;
+        group = groups[0];
+      }
+    } catch (e) {
+      aiGroupId = null;
+    }
+  }
+
+  // 2. Query tabs in the group if the group exists
+  let groupTabs = [];
+  if (aiGroupId !== null) {
+    try {
+      groupTabs = await chrome.tabs.query({ groupId: aiGroupId });
+    } catch (e) {
+      groupTabs = [];
+    }
+  }
+
+  // 3. If there are tabs in the group, pick the best one
+  if (groupTabs.length > 0) {
+    // Priority 1: agentTargetTabId if it belongs to the group
+    if (agentTargetTabId !== null) {
+      const targetTab = groupTabs.find(t => t.id === agentTargetTabId);
+      if (targetTab) {
+        aiTabId = targetTab.id;
         persistAgentContext();
+        return targetTab;
       }
     }
+
+    // Priority 2: the active tab within the group
+    const activeTab = groupTabs.find(t => t.active);
+    if (activeTab) {
+      agentTargetTabId = activeTab.id;
+      aiTabId = activeTab.id;
+      persistAgentContext();
+      return activeTab;
+    }
+
+    // Priority 3: the first tab in the group
+    const firstTab = groupTabs[0];
+    agentTargetTabId = firstTab.id;
+    aiTabId = firstTab.id;
+    persistAgentContext();
+    return firstTab;
   }
 
-  // Fallback to the active tab in the current focused window
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab) {
-    agentTargetTabId = tab.id;
+  // 4. If the group has no tabs (or doesn't exist), create a new tab and group it
+  try {
+    const newTab = await chrome.tabs.create({ active: false, url: "about:blank" });
+    if (aiGroupId === null) {
+      aiGroupId = await chrome.tabs.group({ tabIds: [newTab.id] });
+      await chrome.tabGroups.update(aiGroupId, { title: "BrowserMCPX", color: "purple" });
+    } else {
+      try {
+        await chrome.tabs.group({ tabIds: [newTab.id], groupId: aiGroupId });
+      } catch (e) {
+        // Group might have been deleted/stale
+        aiGroupId = await chrome.tabs.group({ tabIds: [newTab.id] });
+        await chrome.tabGroups.update(aiGroupId, { title: "BrowserMCPX", color: "purple" });
+      }
+    }
+    aiTabId = newTab.id;
+    agentTargetTabId = newTab.id;
     persistAgentContext();
+    return newTab;
+  } catch (err) {
+    console.error("[Browser MCP X] Failed to create or group AI tab:", err);
+    // If everything fails (e.g. extension has no permissions for tab groups, which shouldn't happen),
+    // we still create a tab without group. But we do NOT use active user tab.
+    const newTab = await chrome.tabs.create({ active: false, url: "about:blank" });
+    aiTabId = newTab.id;
+    agentTargetTabId = newTab.id;
+    persistAgentContext();
+    return newTab;
   }
-  return tab;
 }
 
 // ─── Recording State ───
