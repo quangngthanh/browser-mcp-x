@@ -21,6 +21,15 @@ import queue
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 
+# Force UTF-8 stdio. On Windows the default is the locale codepage
+# (cp1252/cp1258/...), which corrupts multibyte input like Vietnamese
+# text (e.g. "Tiếp tục") sent by the MCP client over stdin.
+try:
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
+except AttributeError:
+    pass  # Python < 3.7 has no TextIOWrapper.reconfigure
+
 MCP_PORT = 9275
 WS_PORT = 9274  # WebSocket port for extension connection
 VERSION = "0.4.1"
