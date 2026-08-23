@@ -583,6 +583,57 @@ if (chrome.webRequest && chrome.webRequest.onBeforeRequest) {
   }
 }
 
+// ─── Mojibake Recovery & Unicode Helpers ───
+const CP1252_MAP = {
+  0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85,
+  0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A,
+  0x2039: 0x8B, 0x0152: 0x8C, 0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92,
+  0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
+  0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C,
+  0x017E: 0x9E, 0x0178: 0x9F
+};
+
+function fixMojibake(s) {
+  if (typeof s !== "string" || !s) return s;
+  try {
+    const bytes = [];
+    let hasMojibakeChar = false;
+    for (let i = 0; i < s.length; i++) {
+      const code = s.charCodeAt(i);
+      if (CP1252_MAP[code] !== undefined) {
+        bytes.push(CP1252_MAP[code]);
+        hasMojibakeChar = true;
+      } else if (code <= 0xFF) {
+        bytes.push(code);
+        if (code >= 0x80) hasMojibakeChar = true;
+      } else {
+        return s; // Contains characters outside CP1252/Latin-1
+      }
+    }
+    if (!hasMojibakeChar) return s; // Pure ASCII
+    const dec = new TextDecoder("utf-8", { fatal: true });
+    return dec.decode(new Uint8Array(bytes)) || s;
+  } catch {
+    return s;
+  }
+}
+
+function fixArgsMojibake(args) {
+  if (!args || typeof args !== "object") return args;
+  if (Array.isArray(args)) return args.map(fixArgsMojibake);
+  const fixed = {};
+  for (const [k, v] of Object.entries(args)) {
+    if (typeof v === "string") {
+      fixed[k] = fixMojibake(v);
+    } else if (typeof v === "object" && v !== null) {
+      fixed[k] = fixArgsMojibake(v);
+    } else {
+      fixed[k] = v;
+    }
+  }
+  return fixed;
+}
+
 // ─── MCP Protocol Handler ───
 async function handleMcpRequest(message) {
   const { jsonrpc, id, method, params } = message;
@@ -610,7 +661,7 @@ async function handleMcpRequest(message) {
         break;
 
       case "tools/call":
-        result = await executeTool(params.name, params.arguments || {});
+        result = await executeTool(params.name, fixArgsMojibake(params.arguments || {}));
         break;
 
       case "notifications/initialized":
@@ -882,34 +933,157 @@ async function executeTool(toolName, args, overrideTabId = null) {
     }
 
     case "click_text": {
+      const targetText = fixMojibake(args.text ?? args.targetText ?? "");
+      const isPartial = args.partial !== false;
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id, allFrames: true },
-        func: (targetText) => {
-          const normalize = (s) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
-          const needle = normalize(targetText);
-          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, null, false);
-          let el;
-          while ((el = walker.nextNode())) {
-            if (el.children.length > 0) continue; // only leaf-ish elements
-            const text = normalize(el.textContent || "");
-            if (text === needle || text.includes(needle)) {
-              el.scrollIntoView({ behavior: "instant", block: "center" });
-              const rect = el.getBoundingClientRect();
-              const opts = { bubbles: true, cancelable: true, view: window, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
-              el.dispatchEvent(new PointerEvent("pointerdown", opts));
-              el.dispatchEvent(new MouseEvent("mousedown", opts));
-              el.dispatchEvent(new PointerEvent("pointerup", opts));
-              el.dispatchEvent(new MouseEvent("mouseup", opts));
-              el.dispatchEvent(new MouseEvent("click", opts));
-              if (typeof el.click === "function") el.click();
-              return `Clicked text: "${targetText}"`;
+        func: (searchText, partial) => {
+          if (!searchText) return "Error: No search text provided";
+
+          const CP1252_MAP = {
+            0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85,
+            0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A,
+            0x2039: 0x8B, 0x0152: 0x8C, 0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92,
+            0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
+            0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C,
+            0x017E: 0x9E, 0x0178: 0x9F
+          };
+
+          function fixMojibakeInner(s) {
+            if (typeof s !== "string" || !s) return s;
+            try {
+              const bytes = [];
+              let hasMojibakeChar = false;
+              for (let i = 0; i < s.length; i++) {
+                const code = s.charCodeAt(i);
+                if (CP1252_MAP[code] !== undefined) {
+                  bytes.push(CP1252_MAP[code]);
+                  hasMojibakeChar = true;
+                } else if (code <= 0xFF) {
+                  bytes.push(code);
+                  if (code >= 0x80) hasMojibakeChar = true;
+                } else {
+                  return s;
+                }
+              }
+              if (!hasMojibakeChar) return s;
+              const dec = new TextDecoder("utf-8", { fatal: true });
+              return dec.decode(new Uint8Array(bytes)) || s;
+            } catch {
+              return s;
             }
           }
-          return `No element found with text: "${targetText}"`;
+
+          function stripVietnamese(s) {
+            return (s || "")
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .replace(/[đĐ]/g, (m) => (m === "đ" ? "d" : "d"));
+          }
+
+          function clean(s) {
+            return (s || "").replace(/\s+/g, " ").trim();
+          }
+
+          const rawSearch = clean(searchText);
+          const fixedSearch = clean(fixMojibakeInner(rawSearch));
+          const searchNfc = fixedSearch.normalize("NFC");
+          const searchLower = searchNfc.toLowerCase();
+          const searchStripped = stripVietnamese(searchLower);
+
+          // Priority selectors: buttons/links/interactive first, then generic containers
+          const selectors = [
+            "button", "a", "[role='button']", "[role='link']", "[role='tab']", "[role='menuitem']",
+            "input[type='button']", "input[type='submit']", "input[type='reset']",
+            "[onclick]", "label", "summary", "h1", "h2", "h3", "h4", "h5", "h6", "p", "li", "span", "div"
+          ];
+
+          let bestMatch = null;
+          let bestTier = 999;
+          let bestScore = Infinity;
+
+          function evaluateElement(el) {
+            if (!el || el.nodeType !== 1) return;
+            const style = window.getComputedStyle(el);
+            if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") return;
+
+            const rawText = clean(el.textContent || el.value || el.getAttribute("aria-label") || el.getAttribute("placeholder") || "");
+            if (!rawText) return;
+
+            const fixedElText = clean(fixMojibakeInner(rawText));
+            const elNfc = fixedElText.normalize("NFC");
+            const elLower = elNfc.toLowerCase();
+            const elStripped = stripVietnamese(elLower);
+
+            let tier = 999;
+            if (elNfc === searchNfc) {
+              tier = 1; // Exact match (case & diacritics)
+            } else if (elLower === searchLower) {
+              tier = 2; // Case-insensitive exact match
+            } else if (elStripped === searchStripped) {
+              tier = 3; // Accent-insensitive exact match (e.g. "Dang nhap" == "Đăng nhập")
+            } else if (partial && elLower.includes(searchLower)) {
+              tier = 4; // Case-insensitive substring match
+            } else if (partial && elStripped.includes(searchStripped)) {
+              tier = 5; // Accent-insensitive substring match
+            }
+
+            if (tier < 999) {
+              const lengthScore = elNfc.length;
+              if (tier < bestTier || (tier === bestTier && lengthScore < bestScore)) {
+                bestTier = tier;
+                bestScore = lengthScore;
+                bestMatch = el;
+              }
+            }
+          }
+
+          // Search prioritized selectors first
+          for (const sel of selectors) {
+            const els = document.querySelectorAll(sel);
+            for (const el of els) {
+              evaluateElement(el);
+            }
+            if (bestMatch && bestTier <= 3 && bestScore <= searchNfc.length + 10) {
+              break;
+            }
+          }
+
+          // Fallback to TreeWalker if not found in selector list
+          if (!bestMatch) {
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, null, false);
+            let node;
+            while ((node = walker.nextNode())) {
+              evaluateElement(node);
+            }
+          }
+
+          if (bestMatch) {
+            bestMatch.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
+            const rect = bestMatch.getBoundingClientRect();
+            const opts = {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+              clientX: rect.left + rect.width / 2,
+              clientY: rect.top + rect.height / 2
+            };
+            bestMatch.dispatchEvent(new PointerEvent("pointerdown", opts));
+            bestMatch.dispatchEvent(new MouseEvent("mousedown", opts));
+            bestMatch.dispatchEvent(new PointerEvent("pointerup", opts));
+            bestMatch.dispatchEvent(new MouseEvent("mouseup", opts));
+            bestMatch.dispatchEvent(new MouseEvent("click", opts));
+            if (typeof bestMatch.click === "function") bestMatch.click();
+            const matchedText = clean(bestMatch.textContent || bestMatch.value || bestMatch.getAttribute("aria-label") || "").substring(0, 60);
+            return `Clicked text: "${matchedText}"`;
+          }
+
+          return `No element found with text: "${searchText}"`;
         },
-        args: [args.text]
+        args: [targetText, isPartial]
       });
-      return { content: [{ type: "text", text: results[0]?.result }] };
+      const clickedResult = results.find(r => r?.result && r.result.startsWith("Clicked text:"))?.result || results[0]?.result || `No element found with text: "${targetText}"`;
+      return { content: [{ type: "text", text: clickedResult }] };
     }
 
     case "extract_text": {
@@ -983,13 +1157,46 @@ async function executeTool(toolName, args, overrideTabId = null) {
     }
 
     case "evaluate": {
+      const scriptToRun = fixMojibake(args.script || "");
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         world: "MAIN",
         func: async (script) => {
+          const CP1252_MAP = {
+            0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85,
+            0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A,
+            0x2039: 0x8B, 0x0152: 0x8C, 0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92,
+            0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
+            0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C,
+            0x017E: 0x9E, 0x0178: 0x9F
+          };
+          function fixMojibakeInner(s) {
+            if (typeof s !== "string" || !s) return s;
+            try {
+              const bytes = [];
+              let hasMojibakeChar = false;
+              for (let i = 0; i < s.length; i++) {
+                const code = s.charCodeAt(i);
+                if (CP1252_MAP[code] !== undefined) {
+                  bytes.push(CP1252_MAP[code]);
+                  hasMojibakeChar = true;
+                } else if (code <= 0xFF) {
+                  bytes.push(code);
+                  if (code >= 0x80) hasMojibakeChar = true;
+                } else {
+                  return s;
+                }
+              }
+              if (!hasMojibakeChar) return s;
+              const dec = new TextDecoder("utf-8", { fatal: true });
+              return dec.decode(new Uint8Array(bytes)) || s;
+            } catch {
+              return s;
+            }
+          }
           const serialize = (v) => {
             if (v === undefined) return "undefined";
-            if (typeof v === "string") return v;
+            if (typeof v === "string") return fixMojibakeInner(v);
             if (typeof v === "number" || typeof v === "boolean" || v === null) return String(v);
             try {
               return JSON.stringify(v);
@@ -998,11 +1205,12 @@ async function executeTool(toolName, args, overrideTabId = null) {
             }
           };
           try {
+            const cleanScript = fixMojibakeInner(script);
             let result;
             try {
-              result = (new Function("return (" + script + ")"))();
+              result = (new Function("return (" + cleanScript + ")"))();
             } catch {
-              result = (new Function(script))();
+              result = (new Function(cleanScript))();
             }
             if (result != null && typeof result.then === "function") {
               result = await result;
@@ -1012,9 +1220,9 @@ async function executeTool(toolName, args, overrideTabId = null) {
             return `Error: ${e.message}`;
           }
         },
-        args: [args.script]
+        args: [scriptToRun]
       });
-      return { content: [{ type: "text", text: results[0]?.result || "undefined" }] };
+      return { content: [{ type: "text", text: fixMojibake(results[0]?.result || "undefined") }] };
     }
 
     case "get_page_info": {
@@ -1875,46 +2083,6 @@ session.headers.update(headers)
       return { content: [{ type: "text", text: results[0]?.result }] };
     }
 
-    case "click_text": {
-      const { text, partial = true } = args;
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: (searchText, isPartial) => {
-          // Search most specific elements first (a, button) then generic (div, span)
-          const selectors = ["button", "a", "[role='button']", "input[type='submit']", "[onclick]", "label", "span", "div"];
-          const searchTextLower = searchText.toLowerCase();
-          let bestMatch = null;
-          let bestScore = Infinity;
-          for (const sel of selectors) {
-            const els = document.querySelectorAll(sel);
-            for (const el of els) {
-              const elText = (el.textContent || "").trim();
-              if (!elText) continue;
-              const match = isPartial
-                ? elText.toLowerCase().includes(searchTextLower)
-                : elText.toLowerCase() === searchTextLower;
-              if (match) {
-                // Prefer shorter text (more specific element)
-                const score = elText.length;
-                if (score < bestScore) {
-                  bestScore = score;
-                  bestMatch = el;
-                }
-              }
-            }
-            if (bestMatch && bestScore <= searchText.length + 20) break;
-          }
-          if (bestMatch) {
-            bestMatch.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
-            bestMatch.click();
-            return `Clicked: "${(bestMatch.textContent || "").trim().substring(0, 60)}"`;
-          }
-          return `No element found with text: "${searchText}"`;
-        },
-        args: [text, partial]
-      });
-      return { content: [{ type: "text", text: results[0]?.result }] };
-    }
 
     case "hover": {
       const results = await chrome.scripting.executeScript({

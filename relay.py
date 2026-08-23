@@ -25,10 +25,52 @@ from socketserver import ThreadingMixIn
 # (cp1252/cp1258/...), which corrupts multibyte input like Vietnamese
 # text (e.g. "Tiếp tục") sent by the MCP client over stdin.
 try:
-    sys.stdin.reconfigure(encoding="utf-8")
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 except AttributeError:
     pass  # Python < 3.7 has no TextIOWrapper.reconfigure
+
+CP1252_MAP = {
+    0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85,
+    0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A,
+    0x2039: 0x8B, 0x0152: 0x8C, 0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92,
+    0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
+    0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C,
+    0x017E: 0x9E, 0x0178: 0x9F
+}
+
+def fix_mojibake(s: str) -> str:
+    if not isinstance(s, str) or not s:
+        return s
+    try:
+        raw_bytes = bytearray()
+        has_mojibake = False
+        for ch in s:
+            code = ord(ch)
+            if code in CP1252_MAP:
+                raw_bytes.append(CP1252_MAP[code])
+                has_mojibake = True
+            elif code <= 0xFF:
+                raw_bytes.append(code)
+                if code >= 0x80:
+                    has_mojibake = True
+            else:
+                return s
+        if not has_mojibake:
+            return s
+        return raw_bytes.decode("utf-8")
+    except Exception:
+        return s
+
+def fix_args_mojibake(obj):
+    if isinstance(obj, str):
+        return fix_mojibake(obj)
+    if isinstance(obj, dict):
+        return {k: fix_args_mojibake(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [fix_args_mojibake(x) for x in obj]
+    return obj
 
 MCP_PORT = 9275
 WS_PORT = 9274  # WebSocket port for extension connection
@@ -218,7 +260,7 @@ def handle_extension_connection(conn, addr):
                     if pending:
                         pending.put(parsed)
                         continue
-                sys.stdout.write(json.dumps(parsed) + "\n")
+                sys.stdout.write(json.dumps(parsed, ensure_ascii=False) + "\n")
                 sys.stdout.flush()
             except Exception:
                 pass
@@ -330,11 +372,12 @@ def call_extension_sync(msg: dict, timeout: float = 30.0) -> dict:
             "error": {"code": -32000, "message": "Browser extension not connected. Open Browser MCP X and click Start."}
         }
 
+    msg = fix_args_mojibake(msg)
     response_queue = queue.Queue(maxsize=1)
     with pending_lock:
         pending_responses[msg_id] = response_queue
     try:
-        if not client.send(json.dumps(msg)):
+        if not client.send(json.dumps(msg, ensure_ascii=False)):
             return {
                 "jsonrpc": "2.0", "id": msg_id,
                 "error": {"code": -32001, "message": "Failed to send request to Browser MCP X extension."}
@@ -352,7 +395,7 @@ def call_extension_sync(msg: dict, timeout: float = 30.0) -> dict:
 
 
 def send_stdio(msg: dict):
-    sys.stdout.write(json.dumps(msg) + "\n")
+    sys.stdout.write(json.dumps(msg, ensure_ascii=False) + "\n")
     sys.stdout.flush()
 
 
@@ -529,24 +572,25 @@ class StatusHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             body = self.rfile.read(length).decode("utf-8")
             msg = json.loads(body)
+            msg = fix_args_mojibake(msg)
         except Exception as e:
             self.send_response(400)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps({
                 "jsonrpc": "2.0",
                 "id": None,
                 "error": {"code": -32700, "message": f"Invalid JSON body: {e}"}
-            }).encode())
+            }, ensure_ascii=False).encode("utf-8"))
             return
 
         response = call_extension_sync(msg, timeout=30.0)
         self.send_response(200)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
-        self.wfile.write(json.dumps(response).encode())
+        self.wfile.write(json.dumps(response, ensure_ascii=False).encode("utf-8"))
 
     def log_message(self, format, *args):
         pass  # Suppress default logging
@@ -584,6 +628,7 @@ def handle_stdio_proxy():
             continue
         try:
             msg = json.loads(line)
+            msg = fix_args_mojibake(msg)
         except Exception:
             continue
 
@@ -609,14 +654,14 @@ def handle_stdio_proxy():
 
         # Forward everything else to the running relay's HTTP /mcp endpoint
         try:
-            body = json.dumps(msg).encode()
+            body = json.dumps(msg, ensure_ascii=False).encode("utf-8")
             request = _req.Request(
                 f"http://127.0.0.1:{MCP_PORT}/mcp",
                 data=body,
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": "application/json; charset=utf-8"},
             )
             resp = _req.urlopen(request, timeout=65)
-            send_stdio(json.loads(resp.read()))
+            send_stdio(json.loads(resp.read().decode("utf-8")))
         except Exception as e:
             if msg_id is not None:
                 send_stdio({

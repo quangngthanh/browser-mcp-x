@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`select_option`** — Select a `<select>` option by value, text, or index (returns updated snapshot)
 - Docs updated to list all **37** MCP tools
 
+### Fixed
+- **Vietnamese Encoding & Mojibake (`click_text` / `evaluate`)** — Added automatic CP1252/Latin-1 mojibake recovery across `relay.py`, `browsermcp_server.py`, and `background.js`. Fixed `click_text` Vietnamese character matching (including `đ/Đ` normalization, Unicode NFC/NFD handling, and multi-tier matching). Removed unreachable duplicate `click_text` handler.
+
 ## [0.4.0] — 2026-07-03
 
 ### Added
