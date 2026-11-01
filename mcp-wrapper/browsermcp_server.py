@@ -4,6 +4,8 @@ import json
 import sys
 import urllib.request
 import urllib.error
+import os
+import uuid
 from typing import Any
 
 # Force UTF-8 stdio on all platforms (especially Windows where default code page causes mojibake)
@@ -56,6 +58,7 @@ def fix_args_mojibake(obj):
     return obj
 
 RELAY_URL = "http://127.0.0.1:9275/mcp"
+SESSION_ID = os.environ.get("BROWSER_MCP_X_SESSION") or uuid.uuid4().hex
 
 
 def send_msg(msg: dict):
@@ -79,7 +82,7 @@ def call_relay(method: str, params: dict | None = None, msg_id=None) -> dict:
     if params is not None:
         payload["params"] = fix_args_mojibake(params)
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(RELAY_URL, data=data, headers={"Content-Type": "application/json; charset=utf-8"}, method="POST")
+    req = urllib.request.Request(RELAY_URL, data=data, headers={"Content-Type": "application/json; charset=utf-8", "X-BrowserMCPX-Session": SESSION_ID}, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=60.0) as resp:
             return json.loads(resp.read().decode("utf-8"))

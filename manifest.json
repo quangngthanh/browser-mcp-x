@@ -9,6 +9,7 @@
     "tabGroups",
     "scripting",
     "storage",
+    "alarms",
     "debugger",
     "offscreen",
     "windows",

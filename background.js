@@ -12,7 +12,7 @@ let isRunning = false;
 let connectedAgent = null;
 
 /** Stable refs from the last get_interactive_elements call (per tab). */
-let interactiveElementCache = { tabId: null, filter: "all", items: [] };
+const interactiveElementCache = new Map();
 
 const INTERACTIVE_SELECTORS = {
   all: "button, a[href], input, select, textarea, [contenteditable='true'], [role='button'], [role='textbox'], [onclick], [tabindex]",
@@ -326,50 +326,77 @@ const MCP_TOOLS = [
 ];
 
 // ─── Agent Tab Lock ───
-// Persisted to chrome.storage.local so the agent resumes on its last tab
-// after reconnect or service-worker restart — not wherever the user happens to be.
-let agentTargetTabId = null;
+// Each agent session (one relay/proxy process) owns its own tab inside the
+// "BrowserMCPX" group so concurrent agents never drive the same page.
+// Persisted to chrome.storage.local to survive reconnects and service-worker restarts.
+const DEFAULT_SESSION_ID = "default";
+const SESSION_CLAIM_TTL_MS = 10 * 60 * 1000;
+const IDLE_TAB_TTL_MS = 24 * 60 * 60 * 1000;
+const AGENT_LOCK_TIMEOUT_MS = 15000;
+const IDLE_SWEEP_ALARM = "browsermcpx-idle-tab-sweep";
+let sessionTabs = new Map();
+let tabLastUsed = new Map();
 let activeManipulatedTabIds = new Set();
-let aiTabId = null;
 let aiGroupId = null;
-
-async function getOrCreateAITab() {
-  const tab = await getAgentTab();
-  return tab ? tab.id : null;
-}
-
-async function getActiveTabId() {
-  return await getOrCreateAITab();
-}
+let agentTabQueue = Promise.resolve();
+let agentContextRestored = false;
 
 function persistAgentContext() {
   chrome.storage.local.set({
-    agentTargetTabId,
+    sessionTabs: Object.fromEntries(sessionTabs),
+    tabLastUsed: Object.fromEntries(tabLastUsed),
     activeManipulatedTabIds: Array.from(activeManipulatedTabIds),
-    aiTabId,
     aiGroupId
   });
 }
 
-async function restoreAgentContext() {
-  const stored = await chrome.storage.local.get(["agentTargetTabId", "activeManipulatedTabIds", "aiTabId", "aiGroupId"]);
-  if (stored.agentTargetTabId != null) {
-    try {
-      await chrome.tabs.get(stored.agentTargetTabId);
-      agentTargetTabId = stored.agentTargetTabId;
-    } catch (e) {
-      agentTargetTabId = null;
+function withAgentLock(fn) {
+  const run = agentTabQueue.then(() => withTimeout(fn(), AGENT_LOCK_TIMEOUT_MS, "Agent tab lock"));
+  agentTabQueue = run.catch(() => {});
+  return run;
+}
+
+function restoreAgentContext() {
+  return withAgentLock(loadAgentContext);
+}
+
+async function ensureAgentContext() {
+  if (!agentContextRestored) await loadAgentContext();
+}
+
+async function tabExists(tabId) {
+  try {
+    await chrome.tabs.get(tabId);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function loadAgentContext() {
+  agentContextRestored = true;
+  const stored = await chrome.storage.local.get(["sessionTabs", "tabLastUsed", "activeManipulatedTabIds", "aiGroupId"]);
+  const now = Date.now();
+  if (stored.tabLastUsed && typeof stored.tabLastUsed === "object") {
+    for (const [id, ts] of Object.entries(stored.tabLastUsed)) {
+      const tabId = Number(id);
+      if (!tabLastUsed.has(tabId) && await tabExists(tabId)) tabLastUsed.set(tabId, ts);
     }
   }
-  if (stored.aiTabId != null) {
-    try {
-      await chrome.tabs.get(stored.aiTabId);
-      aiTabId = stored.aiTabId;
-    } catch (e) {
-      aiTabId = null;
+  if (stored.sessionTabs && typeof stored.sessionTabs === "object") {
+    for (const [sessionId, entry] of Object.entries(stored.sessionTabs)) {
+      if (sessionTabs.has(sessionId) || !entry || entry.tabId == null) continue;
+      if (now - (entry.lastUsed || 0) > IDLE_TAB_TTL_MS) continue;
+      const owned = [];
+      for (const id of [entry.tabId, ...(entry.ownedTabIds || [])]) {
+        if (!owned.includes(id) && await tabExists(id)) owned.push(id);
+      }
+      if (owned.includes(entry.tabId)) {
+        sessionTabs.set(sessionId, { tabId: entry.tabId, ownedTabIds: owned, lastUsed: entry.lastUsed });
+      }
     }
   }
-  if (stored.aiGroupId != null) {
+  if (stored.aiGroupId != null && aiGroupId === null) {
     try {
       await chrome.tabGroups.get(stored.aiGroupId);
       aiGroupId = stored.aiGroupId;
@@ -379,107 +406,181 @@ async function restoreAgentContext() {
   }
   if (Array.isArray(stored.activeManipulatedTabIds)) {
     for (const id of stored.activeManipulatedTabIds) {
-      try {
-        await chrome.tabs.get(id);
-        activeManipulatedTabIds.add(id);
-      } catch (e) { /* tab gone */ }
+      if (await tabExists(id)) activeManipulatedTabIds.add(id);
     }
   }
   persistAgentContext();
 }
 
-async function getAgentTab() {
-  // 1. Resolve or find the "BrowserMCPX" tab group
-  let group = null;
-  if (aiGroupId !== null) {
-    try {
-      group = await chrome.tabGroups.get(aiGroupId);
-    } catch (e) {
-      aiGroupId = null;
-    }
-  }
+function isClaimActive(entry) {
+  return Date.now() - entry.lastUsed < SESSION_CLAIM_TTL_MS;
+}
 
-  if (!group) {
-    try {
-      const groups = await chrome.tabGroups.query({ title: "BrowserMCPX" });
-      if (groups.length > 0) {
-        aiGroupId = groups[0].id;
-        group = groups[0];
-      }
-    } catch (e) {
-      aiGroupId = null;
-    }
-  }
-
-  // 2. Query tabs in the group if the group exists
-  let groupTabs = [];
-  if (aiGroupId !== null) {
-    try {
-      groupTabs = await chrome.tabs.query({ groupId: aiGroupId });
-    } catch (e) {
-      groupTabs = [];
-    }
-  }
-
-  // 3. If there are tabs in the group, pick the best one
-  if (groupTabs.length > 0) {
-    // Priority 1: agentTargetTabId if it belongs to the group
-    if (agentTargetTabId !== null) {
-      const targetTab = groupTabs.find(t => t.id === agentTargetTabId);
-      if (targetTab) {
-        aiTabId = targetTab.id;
-        persistAgentContext();
-        return targetTab;
-      }
-    }
-
-    // Priority 2: the active tab within the group
-    const activeTab = groupTabs.find(t => t.active);
-    if (activeTab) {
-      agentTargetTabId = activeTab.id;
-      aiTabId = activeTab.id;
-      persistAgentContext();
-      return activeTab;
-    }
-
-    // Priority 3: the first tab in the group
-    const firstTab = groupTabs[0];
-    agentTargetTabId = firstTab.id;
-    aiTabId = firstTab.id;
-    persistAgentContext();
-    return firstTab;
-  }
-
-  // 4. If the group has no tabs (or doesn't exist), create a new tab and group it
-  try {
-    const newTab = await chrome.tabs.create({ active: false, url: "about:blank" });
-    if (aiGroupId === null) {
-      aiGroupId = await chrome.tabs.group({ tabIds: [newTab.id] });
-      await chrome.tabGroups.update(aiGroupId, { title: "BrowserMCPX", color: "purple" });
-    } else {
-      try {
-        await chrome.tabs.group({ tabIds: [newTab.id], groupId: aiGroupId });
-      } catch (e) {
-        // Group might have been deleted/stale
-        aiGroupId = await chrome.tabs.group({ tabIds: [newTab.id] });
-        await chrome.tabGroups.update(aiGroupId, { title: "BrowserMCPX", color: "purple" });
-      }
-    }
-    aiTabId = newTab.id;
-    agentTargetTabId = newTab.id;
-    persistAgentContext();
-    return newTab;
-  } catch (err) {
-    console.error("[Browser MCP X] Failed to create or group AI tab:", err);
-    // If everything fails (e.g. extension has no permissions for tab groups, which shouldn't happen),
-    // we still create a tab without group. But we do NOT use active user tab.
-    const newTab = await chrome.tabs.create({ active: false, url: "about:blank" });
-    aiTabId = newTab.id;
-    agentTargetTabId = newTab.id;
-    persistAgentContext();
-    return newTab;
+function releaseTab(tabId, exceptSessionId) {
+  for (const [sid, entry] of sessionTabs) {
+    if (sid === exceptSessionId) continue;
+    entry.ownedTabIds = entry.ownedTabIds.filter(id => id !== tabId);
+    if (entry.tabId === tabId || entry.ownedTabIds.length === 0) sessionTabs.delete(sid);
   }
 }
+
+function claimTab(sessionId, tabId, { makeCurrent = true } = {}) {
+  releaseTab(tabId, sessionId);
+  const entry = sessionTabs.get(sessionId) || { tabId, ownedTabIds: [] };
+  if (makeCurrent) entry.tabId = tabId;
+  if (!entry.ownedTabIds.includes(tabId)) entry.ownedTabIds.push(tabId);
+  entry.lastUsed = Date.now();
+  sessionTabs.set(sessionId, entry);
+  tabLastUsed.set(tabId, entry.lastUsed);
+  persistAgentContext();
+}
+
+function touchSession(sessionId, tabId) {
+  const now = Date.now();
+  tabLastUsed.set(tabId, now);
+  const entry = sessionTabs.get(sessionId);
+  if (entry && entry.ownedTabIds.includes(tabId)) entry.lastUsed = now;
+  persistAgentContext();
+}
+
+function tabOwner(tabId, exceptSessionId) {
+  for (const [sid, entry] of sessionTabs) {
+    if (sid !== exceptSessionId && entry.ownedTabIds.includes(tabId) && isClaimActive(entry)) return sid;
+  }
+  return null;
+}
+
+async function resolveAgentGroup() {
+  if (aiGroupId !== null) {
+    try {
+      await chrome.tabGroups.get(aiGroupId);
+      return;
+    } catch (e) {
+      aiGroupId = null;
+    }
+  }
+  try {
+    const groups = await chrome.tabGroups.query({ title: "BrowserMCPX" });
+    if (groups.length > 0) aiGroupId = groups[0].id;
+  } catch (e) {
+    aiGroupId = null;
+  }
+}
+
+async function addTabToAgentGroup(tabId) {
+  await resolveAgentGroup();
+  if (aiGroupId !== null) {
+    try {
+      await chrome.tabs.group({ tabIds: [tabId], groupId: aiGroupId });
+      return;
+    } catch (e) { /* stale group, create a new one */ }
+  }
+  aiGroupId = await chrome.tabs.group({ tabIds: [tabId] });
+  await chrome.tabGroups.update(aiGroupId, { title: "BrowserMCPX", color: "purple" });
+}
+
+async function queryAgentGroupTabs() {
+  await resolveAgentGroup();
+  if (aiGroupId === null) return [];
+  try {
+    return await chrome.tabs.query({ groupId: aiGroupId });
+  } catch (e) {
+    return [];
+  }
+}
+
+function getAgentTab(sessionId = DEFAULT_SESSION_ID) {
+  return withAgentLock(() => resolveAgentTab(sessionId));
+}
+
+async function resolveAgentTab(sessionId) {
+  await ensureAgentContext();
+  const groupTabs = await queryAgentGroupTabs();
+
+  const own = sessionTabs.get(sessionId);
+  if (own) {
+    const ownTab = groupTabs.find(t => t.id === own.tabId);
+    if (ownTab) {
+      claimTab(sessionId, ownTab.id);
+      return ownTab;
+    }
+    sessionTabs.delete(sessionId);
+  }
+
+  const free = groupTabs.filter(t => !tabOwner(t.id, sessionId));
+  const picked = free.find(t => t.active) || free[0];
+  if (picked) {
+    claimTab(sessionId, picked.id);
+    return picked;
+  }
+
+  const newTab = await chrome.tabs.create({ active: false, url: "about:blank" });
+  try {
+    await addTabToAgentGroup(newTab.id);
+  } catch (err) {
+    console.error("[Browser MCP X] Failed to group AI tab:", err);
+  }
+  claimTab(sessionId, newTab.id);
+  return newTab;
+}
+
+function switchSessionTab(sessionId, tabId) {
+  return withAgentLock(async () => {
+    await ensureAgentContext();
+    const groupTabs = await queryAgentGroupTabs();
+    if (!groupTabs.some(t => t.id === tabId)) {
+      throw new Error(`Tab ${tabId} is not in the BrowserMCPX group`);
+    }
+    if (tabOwner(tabId, sessionId)) {
+      throw new Error(`Tab ${tabId} is in use by another agent session`);
+    }
+    claimTab(sessionId, tabId);
+  });
+}
+
+function registerCreatedTab(sessionId, tabId, grouped) {
+  return withAgentLock(async () => {
+    await ensureAgentContext();
+    if (grouped) await addTabToAgentGroup(tabId);
+    claimTab(sessionId, tabId, { makeCurrent: !sessionTabs.has(sessionId) });
+  });
+}
+
+function closeIdleAgentTabs() {
+  return withAgentLock(async () => {
+    await ensureAgentContext();
+    const now = Date.now();
+    const idle = [];
+    for (const tab of await queryAgentGroupTabs()) {
+      if (!tabLastUsed.has(tab.id)) {
+        tabLastUsed.set(tab.id, now);
+      } else if (now - tabLastUsed.get(tab.id) > IDLE_TAB_TTL_MS) {
+        idle.push(tab.id);
+      }
+    }
+    if (idle.length > 0) {
+      await chrome.tabs.remove(idle).catch(() => {});
+      for (const id of idle) {
+        releaseTab(id, null);
+        tabLastUsed.delete(id);
+      }
+    }
+    persistAgentContext();
+    return idle;
+  });
+}
+
+chrome.alarms.create(IDLE_SWEEP_ALARM, { periodInMinutes: 30 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === IDLE_SWEEP_ALARM) closeIdleAgentTabs().catch(() => {});
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  releaseTab(tabId, null);
+  tabLastUsed.delete(tabId);
+  interactiveElementCache.delete(tabId);
+  persistAgentContext();
+});
 
 // ─── Recording State ───
 let recordingState = { isRecording: false, actions: [], recordingTabId: null };
@@ -661,7 +762,7 @@ async function handleMcpRequest(message) {
         break;
 
       case "tools/call":
-        result = await executeTool(params.name, fixArgsMojibake(params.arguments || {}));
+        result = await executeTool(params.name, fixArgsMojibake(params.arguments || {}), null, message.sessionId || DEFAULT_SESSION_ID);
         break;
 
       case "notifications/initialized":
@@ -745,7 +846,7 @@ async function captureWithDebugger(tabId, format = "jpeg", quality = 75) {
 }
 
 // ─── Tool Execution ───
-async function executeTool(toolName, args, overrideTabId = null) {
+async function executeTool(toolName, args, overrideTabId = null, sessionId = DEFAULT_SESSION_ID) {
   const explicitTabId = args.tabId ?? args.id ?? overrideTabId;
   let tab = null;
 
@@ -757,13 +858,16 @@ async function executeTool(toolName, args, overrideTabId = null) {
     }
   }
 
-  if (!tab) {
-    tab = await getAgentTab();
+  const tabOptional = ["get_tabs", "switch_tab", "close_tab", "create_tab"].includes(toolName);
+  if (!tab && !tabOptional) {
+    tab = await getAgentTab(sessionId);
   }
 
-  if (!tab && !["get_tabs", "switch_tab", "close_tab"].includes(toolName)) {
+  if (!tab && !tabOptional) {
     throw new Error("No active tab found");
   }
+
+  if (tab) touchSession(sessionId, tab.id);
 
   if (tab && tab.id) {
     await showAgentFrame(tab.id);
@@ -1141,9 +1245,8 @@ async function executeTool(toolName, args, overrideTabId = null) {
       if (targetTabId == null) {
         return { content: [{ type: "text", text: "Error: missing tabId or id argument" }] };
       }
-      await chrome.tabs.update(targetTabId, { active: true });
-      agentTargetTabId = targetTabId;
-      persistAgentContext();
+      await switchSessionTab(sessionId, Number(targetTabId));
+      await chrome.tabs.update(Number(targetTabId), { active: true });
       return { content: [{ type: "text", text: `Switched to tab ${targetTabId}` }] };
     }
 
@@ -1571,10 +1674,10 @@ async function executeTool(toolName, args, overrideTabId = null) {
         const windowId = tab ? tab.windowId : undefined;
         newTab = await chrome.tabs.create({ windowId, url, active });
       }
-      if (!args.newWindow && aiGroupId !== null) {
-        try {
-          await chrome.tabs.group({ tabIds: [newTab.id], groupId: aiGroupId });
-        } catch (e) {}
+      try {
+        await registerCreatedTab(sessionId, newTab.id, !args.newWindow);
+      } catch (e) {
+        console.warn("[Browser MCP X] Failed to register created tab:", e);
       }
       if (args.url) await waitForTabLoad(newTab.id);
       return { content: [{ type: "text", text: `Created tab ${newTab.id} with URL: ${url}${args.newWindow ? " (new window)" : ""}` }] };
@@ -1586,7 +1689,7 @@ async function executeTool(toolName, args, overrideTabId = null) {
       const results = [];
       for (const step of steps) {
         try {
-          const stepResult = await executeTool(step.tool, step.args || {}, targetTabId);
+          const stepResult = await executeTool(step.tool, step.args || {}, targetTabId, sessionId);
           results.push({ tool: step.tool, success: true, result: stepResult });
         } catch (e) {
           results.push({ tool: step.tool, success: false, error: e.message });
@@ -1947,16 +2050,13 @@ session.headers.update(headers)
         args: [filter, INTERACTIVE_SELECTORS]
       });
       const items = results[0]?.result || [];
-      interactiveElementCache = { tabId: tab.id, filter, items };
+      interactiveElementCache.set(tab.id, { filter, items });
       return { content: [{ type: "text", text: JSON.stringify(items, null, 2) }] };
     }
 
     case "click_by_id": {
       const elementId = args.elementId;
-      const cached =
-        interactiveElementCache.tabId === tab.id
-          ? interactiveElementCache.items.find((i) => i.id === elementId)
-          : null;
+      const cached = interactiveElementCache.get(tab.id)?.items.find((i) => i.id === elementId) ?? null;
 
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
@@ -2022,10 +2122,7 @@ session.headers.update(headers)
 
     case "type_by_id": {
       const elementId = args.elementId;
-      const cached =
-        interactiveElementCache.tabId === tab.id
-          ? interactiveElementCache.items.find((i) => i.id === elementId)
-          : null;
+      const cached = interactiveElementCache.get(tab.id)?.items.find((i) => i.id === elementId) ?? null;
 
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
@@ -2369,7 +2466,7 @@ session.headers.update(headers)
       }
 
       if (action === "key") {
-        const keyResult = await executeTool("press_key", { key: keyCombo }, tab.id);
+        const keyResult = await executeTool("press_key", { key: keyCombo }, tab.id, sessionId);
         const dataUrl = await captureWithDebugger(tab.id);
         return {
           content: [

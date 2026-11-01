@@ -18,6 +18,9 @@ import struct
 import hashlib
 import base64
 import queue
+import itertools
+import os
+import uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 
@@ -125,6 +128,7 @@ class ExtensionClient:
         self.addr = addr
         self.alive = True
         self._buf = b""
+        self._send_lock = threading.Lock()
 
     def _read_bytes(self, n: int) -> bytes:
         """Read exactly n bytes, accumulating across TCP packets."""
@@ -139,7 +143,8 @@ class ExtensionClient:
 
     def send(self, data: str) -> bool:
         try:
-            self.conn.sendall(WebSocketFrame.encode(data))
+            with self._send_lock:
+                self.conn.sendall(WebSocketFrame.encode(data))
             return True
         except Exception:
             self.alive = False
@@ -209,6 +214,9 @@ extension_client = None
 extension_lock = threading.Lock()
 pending_responses = {}
 pending_lock = threading.Lock()
+_internal_ids = itertools.count(1)
+SESSION_HEADER = "X-BrowserMCPX-Session"
+LOCAL_SESSION_ID = os.environ.get("BROWSER_MCP_X_SESSION") or uuid.uuid4().hex
 
 
 def handle_extension_connection(conn, addr):
@@ -259,7 +267,9 @@ def handle_extension_connection(conn, addr):
                         pending = pending_responses.get(msg_id)
                     if pending:
                         pending.put(parsed)
-                        continue
+                    else:
+                        print(f"[Browser MCP X] Dropping late response {msg_id}", file=sys.stderr)
+                    continue
                 sys.stdout.write(json.dumps(parsed, ensure_ascii=False) + "\n")
                 sys.stdout.flush()
             except Exception:
@@ -357,41 +367,50 @@ def wait_for_extension(timeout: float = 15.0) -> bool:
     return False
 
 
-def call_extension_sync(msg: dict, timeout: float = 30.0) -> dict:
-    """Forward an MCP request to the extension and wait for its JSON-RPC response."""
-    msg_id = msg.get("id")
-    if msg_id is None:
-        msg_id = int(time.time() * 1000)
-        msg["id"] = msg_id
+def call_extension_sync(msg: dict, timeout: float = 30.0, session_id: str = None) -> dict:
+    """Forward an MCP request to the extension and wait for its JSON-RPC response.
+
+    Each agent numbers its own requests from 1, so the client id is swapped for a
+    relay-unique id on the wire and restored on the response.
+    """
+    client_id = msg.get("id")
+    internal_id = f"bmx-{next(_internal_ids)}"
+
+    def reply(resp: dict) -> dict:
+        resp = dict(resp)
+        resp["id"] = client_id
+        return resp
 
     with extension_lock:
         client = extension_client if extension_client and extension_client.alive else None
     if not client:
-        return {
-            "jsonrpc": "2.0", "id": msg_id,
+        return reply({
+            "jsonrpc": "2.0",
             "error": {"code": -32000, "message": "Browser extension not connected. Open Browser MCP X and click Start."}
-        }
+        })
 
-    msg = fix_args_mojibake(msg)
+    out = dict(fix_args_mojibake(msg))
+    out["id"] = internal_id
+    out["sessionId"] = session_id or LOCAL_SESSION_ID
     response_queue = queue.Queue(maxsize=1)
     with pending_lock:
-        pending_responses[msg_id] = response_queue
+        pending_responses[internal_id] = response_queue
     try:
-        if not client.send(json.dumps(msg, ensure_ascii=False)):
-            return {
-                "jsonrpc": "2.0", "id": msg_id,
+        if not client.send(json.dumps(out, ensure_ascii=False)):
+            return reply({
+                "jsonrpc": "2.0",
                 "error": {"code": -32001, "message": "Failed to send request to Browser MCP X extension."}
-            }
+            })
         try:
-            return response_queue.get(timeout=timeout)
+            return reply(response_queue.get(timeout=timeout))
         except queue.Empty:
-            return {
-                "jsonrpc": "2.0", "id": msg_id,
+            return reply({
+                "jsonrpc": "2.0",
                 "error": {"code": -32002, "message": f"Timeout waiting for Browser MCP X response after {timeout}s."}
-            }
+            })
     finally:
         with pending_lock:
-            pending_responses.pop(msg_id, None)
+            pending_responses.pop(internal_id, None)
 
 
 def send_stdio(msg: dict):
@@ -407,6 +426,8 @@ def handle_stdio_message(msg: dict):
     # Notifications have no id / no response
     if method == "notifications/initialized":
         print("[Browser MCP X] Client initialized", file=sys.stderr)
+        return
+    if msg_id is None:
         return
 
     if method == "initialize":
@@ -585,7 +606,9 @@ class StatusHandler(BaseHTTPRequestHandler):
             }, ensure_ascii=False).encode("utf-8"))
             return
 
-        response = call_extension_sync(msg, timeout=30.0)
+        session_id = self.headers.get(SESSION_HEADER) or "http-default"
+        timeout = 55.0 if msg.get("method") == "tools/call" else 30.0
+        response = call_extension_sync(msg, timeout=timeout, session_id=session_id)
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -621,6 +644,7 @@ def handle_stdio_proxy():
     """Proxy mode: relay.py already running — forward stdio MCP to its HTTP endpoint."""
     import urllib.request as _req
     print(f"[Browser MCP X] Relay already running. Proxy mode → http://127.0.0.1:{MCP_PORT}/mcp", file=sys.stderr)
+    session_id = LOCAL_SESSION_ID
 
     for line in sys.stdin:
         line = line.strip()
@@ -636,7 +660,7 @@ def handle_stdio_proxy():
         msg_id = msg.get("id")
 
         # Handle handshake locally — no round-trip needed
-        if method == "notifications/initialized":
+        if msg_id is None:
             continue
         if method == "initialize":
             send_stdio({
@@ -658,7 +682,10 @@ def handle_stdio_proxy():
             request = _req.Request(
                 f"http://127.0.0.1:{MCP_PORT}/mcp",
                 data=body,
-                headers={"Content-Type": "application/json; charset=utf-8"},
+                headers={
+                    "Content-Type": "application/json; charset=utf-8",
+                    SESSION_HEADER: session_id,
+                },
             )
             resp = _req.urlopen(request, timeout=65)
             send_stdio(json.loads(resp.read().decode("utf-8")))
