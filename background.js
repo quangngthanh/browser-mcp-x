@@ -61,12 +61,12 @@ const MCP_TOOLS = [
   },
   {
     name: "get_tabs",
-    description: "List all open tabs with their IDs, titles, and URLs",
+    description: "List all open tabs with their IDs, titles, and URLs. Each agent session owns its own tab(s) in the BrowserMCPX group: the result includes your sessionId and currentTabId, and each tab has owner = 'you' | 'other-agent' | 'free'. Do not drive tabs owned by another agent.",
     inputSchema: { type: "object", properties: {} }
   },
   {
     name: "switch_tab",
-    description: "Switch to a specific tab by its ID",
+    description: "Make a BrowserMCPX group tab your session's current tab. Fails if the tab is outside the group or in use by another agent session.",
     inputSchema: { type: "object", properties: { tabId: { type: "number" } }, required: ["tabId"] }
   },
   {
@@ -81,7 +81,7 @@ const MCP_TOOLS = [
   },
   {
     name: "get_page_info",
-    description: "Get metadata about the current page (title, URL, viewport size)",
+    description: "Get metadata about the current page (title, URL, viewport size) plus the tabId and your agent sessionId",
     inputSchema: { type: "object", properties: {} }
   },
   {
@@ -145,7 +145,7 @@ const MCP_TOOLS = [
   // ─── Multi-Tab Workflows ───
   {
     name: "create_tab",
-    description: "Create a new tab with an optional URL. Opens in the background by default so it doesn't steal focus from the user; pass active=true to foreground it. Pass newWindow=true to open it in a separate Chrome window (same profile/session) instead of the current window.",
+    description: "Create a new tab with an optional URL. The tab joins the BrowserMCPX group and is owned by your session (other agents will not take it); it becomes your current tab only if you have none yet. Opens in the background by default so it doesn't steal focus from the user; pass active=true to foreground it. Pass newWindow=true to open it in a separate Chrome window (same profile/session) instead of the current window.",
     inputSchema: { type: "object", properties: { url: { type: "string" }, active: { type: "boolean", default: false }, newWindow: { type: "boolean", default: false } } }
   },
   {
@@ -1230,14 +1230,20 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
           groupMap[gid] = { title: g.title, color: g.color };
         } catch (e) {}
       }
+      await withAgentLock(ensureAgentContext);
+      const own = sessionTabs.get(sessionId);
       const tabList = tabs.map(t => {
         const entry = { id: t.id, title: t.title, url: t.url, active: t.active };
         if (t.groupId >= 0) {
           entry.groupTitle = groupMap[t.groupId]?.title || "";
         }
+        if (t.groupId >= 0 && t.groupId === aiGroupId) {
+          entry.owner = own?.ownedTabIds.includes(t.id) ? "you" : tabOwner(t.id, sessionId) ? "other-agent" : "free";
+        }
         return entry;
       });
-      return { content: [{ type: "text", text: JSON.stringify(tabList, null, 2) }] };
+      const payload = { sessionId, currentTabId: own?.tabId ?? null, tabs: tabList };
+      return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
     }
 
     case "switch_tab": {
@@ -1338,7 +1344,8 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
           scroll: { x: window.scrollX, y: window.scrollY }
         })
       });
-      return { content: [{ type: "text", text: JSON.stringify(results[0]?.result, null, 2) }] };
+      const info = { ...results[0]?.result, tabId: tab.id, sessionId };
+      return { content: [{ type: "text", text: JSON.stringify(info, null, 2) }] };
     }
 
     case "fill_form": {
