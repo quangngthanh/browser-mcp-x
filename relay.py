@@ -305,52 +305,17 @@ def run_ws_server(server: socket.socket):
 
 # ─── stdio MCP handler ───
 
-STATIC_TOOLS = [
-    {"name": "navigate", "description": "Navigate the active tab to a URL", "inputSchema": {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}},
-    {"name": "screenshot", "description": "Take a screenshot of the active tab", "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "get_dom", "description": "Extract the DOM structure of the active tab as text (simplified accessibility tree)", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string", "default": "body"}}}},
-    {"name": "click", "description": "Click an element by CSS selector", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string"}}, "required": ["selector"]}},
-    {"name": "type_text", "description": "Type text into an input, textarea, or contenteditable / rich-text editor. Uses native setters + insertText so React-controlled fields update.", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string"}, "text": {"type": "string"}}, "required": ["selector", "text"]}},
-    {"name": "extract_text", "description": "Extract text content from the active tab, optionally from a specific selector", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string", "default": "body"}}}},
-    {"name": "scroll", "description": "Scroll the page or a specific element (e.g. a dialog overlay) by a given amount", "inputSchema": {"type": "object", "properties": {"direction": {"type": "string", "enum": ["up", "down"], "default": "down"}, "amount": {"type": "number", "default": 500}, "selector": {"type": "string", "description": "CSS selector of the scrollable container; omit to scroll the page"}}}},
-    {"name": "get_tabs", "description": "List all open tabs with their IDs, titles, and URLs. Each agent session owns its own tab(s) in the BrowserMCPX group: the result includes your sessionId and currentTabId, and each tab has owner = 'you' | 'other-agent' | 'free'. Do not drive tabs owned by another agent.", "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "switch_tab", "description": "Make a BrowserMCPX group tab your session's current tab. Fails if the tab is outside the group or in use by another agent session.", "inputSchema": {"type": "object", "properties": {"tabId": {"type": "number"}}, "required": ["tabId"]}},
-    {"name": "close_tab", "description": "Close a tab by its ID", "inputSchema": {"type": "object", "properties": {"tabId": {"type": "number"}}, "required": ["tabId"]}},
-    {"name": "evaluate", "description": "Run JavaScript in the active tab. Awaits Promises. Objects are JSON-serialized.", "inputSchema": {"type": "object", "properties": {"script": {"type": "string"}}, "required": ["script"]}},
-    {"name": "get_page_info", "description": "Get metadata about the current page (title, URL, viewport size) plus the tabId and your agent sessionId", "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "fill_form", "description": "Fill multiple form fields at once. Pass an object of {selector: value} pairs.", "inputSchema": {"type": "object", "properties": {"fields": {"type": "object"}}, "required": ["fields"]}},
-    {"name": "wait", "description": "Wait for a specified number of milliseconds", "inputSchema": {"type": "object", "properties": {"ms": {"type": "number", "default": 1000}}}},
-    {"name": "press_key", "description": "Press a key on the focused element. Supports combos like 'Enter', 'Escape', 'Control+a', 'Ctrl+Enter'.", "inputSchema": {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]}},
-    {"name": "download_image", "description": "Download a page image to the user's Downloads folder via canvas capture (avoids CORS). Prefer over fetch(img.src).", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string", "description": "CSS selector for <img>. If omitted or not found, downloads the largest image on the page."}, "filename": {"type": "string", "description": "Filename, e.g. image.png"}}}},
-    {"name": "get_links", "description": "Extract all links from the page with their text and href", "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "start_recording", "description": "Start recording browser actions (clicks, inputs, navigations) for later playback", "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "stop_recording", "description": "Stop recording and return the recorded action sequence as JSON", "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "playback", "description": "Replay a previously recorded action sequence. Pass the actions array from stop_recording.", "inputSchema": {"type": "object", "properties": {"actions": {"type": "array"}, "speed": {"type": "number", "default": 1}}, "required": ["actions"]}},
-    {"name": "detect_forms", "description": "Auto-detect all forms on the page with their fields, types, labels, and selectors", "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "auto_fill_form", "description": "Auto-fill a form with AI-generated values. Detects the form and suggests values based on field types/names.", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string", "default": "form"}, "values": {"type": "object"}}}},
-    {"name": "create_tab", "description": "Create a new tab with an optional URL. The tab joins the BrowserMCPX group and is owned by your session (other agents will not take it); it becomes your current tab only if you have none yet. Opens in the background by default so it doesn't steal focus from the user; pass active=true to foreground it. Pass newWindow=true to open it in a separate Chrome window (same profile/session) instead of the current window.", "inputSchema": {"type": "object", "properties": {"url": {"type": "string"}, "active": {"type": "boolean", "default": True}}}},
-    {"name": "batch_execute", "description": "Execute multiple tool calls in sequence on a specific tab. Pass an array of {tool, args} objects.", "inputSchema": {"type": "object", "properties": {"tabId": {"type": "number"}, "steps": {"type": "array"}}, "required": ["steps"]}},
-    {"name": "get_console_logs", "description": "Capture console logs from the active tab (errors, warnings, logs)", "inputSchema": {"type": "object", "properties": {"level": {"type": "string", "enum": ["error", "warn", "log", "all"], "default": "all"}}}},
-    {"name": "get_network_requests", "description": "Capture recent network requests from the active tab (URL, method, status, type, headers, payload)", "inputSchema": {"type": "object", "properties": {"filter": {"type": "string", "default": ""}, "type": {"type": "string", "enum": ["all", "xmlhttprequest", "fetch", "script", "main_frame", "sub_frame"], "default": "all"}, "limit": {"type": "number", "default": 50}, "includeHeaders": {"type": "boolean", "default": True}}}},
-    {"name": "get_api_requests", "description": "Capture API calls (XHR/Fetch) with full HTTP headers, Auth Tokens, parameters, and request body payloads for direct API re-play.", "inputSchema": {"type": "object", "properties": {"filter": {"type": "string", "default": ""}, "limit": {"type": "number", "default": 20}}}},
-    {"name": "get_curl_command", "description": "Generate a copy-pasteable cURL command for a captured network request (including auth headers and payload) to execute directly without UI.", "inputSchema": {"type": "object", "properties": {"urlPattern": {"type": "string"}, "requestIndex": {"type": "number", "default": 0}}, "required": ["urlPattern"]}},
-    {"name": "export_api_session", "description": "Export authentication cookies, bearer tokens, and headers for a domain. Returns JSON + ready-to-run Python requests script to call APIs headlessly.", "inputSchema": {"type": "object", "properties": {"domain": {"type": "string", "default": ""}}}},
-    {"name": "highlight", "description": "Visually highlight an element with a colored border. Pass a CSS selector. Pass duration=0 to remove all highlights.", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string"}, "color": {"type": "string", "default": "#E55934"}, "duration": {"type": "number", "default": 3000}}, "required": ["selector"]}},
-    {"name": "wait_for_element", "description": "Wait until an element matching the CSS selector appears on the page. Auto-resolves when found or after timeout.", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string"}, "timeout": {"type": "number", "default": 10000}, "visible": {"type": "boolean", "default": True}}, "required": ["selector"]}},
-    {"name": "get_interactive_elements", "description": "List all interactive elements (buttons, links, inputs, selects) with numeric IDs. Use the returned ID with click_by_id or type_by_id.", "inputSchema": {"type": "object", "properties": {"filter": {"type": "string", "enum": ["all", "buttons", "links", "inputs", "forms"], "default": "all"}}}},
-    {"name": "click_by_id", "description": "Click an element by its interactive ID (from get_interactive_elements). Much easier than CSS selectors.", "inputSchema": {"type": "object", "properties": {"elementId": {"type": "number"}}, "required": ["elementId"]}},
-    {"name": "type_by_id", "description": "Type text into the element with the given interactive ID (from get_interactive_elements).", "inputSchema": {"type": "object", "properties": {"elementId": {"type": "number"}, "text": {"type": "string"}}, "required": ["elementId", "text"]}},
-    {"name": "click_text", "description": "Click an element by its visible text content. e.g. click_text({text: 'Submit'}). Searches buttons, links, and all visible elements.", "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}, "partial": {"type": "boolean", "default": True}}, "required": ["text"]}},
-    {"name": "hover", "description": "Hover over an element by CSS selector. Triggers mouseenter/mouseover events.", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string"}}, "required": ["selector"]}},
-    {"name": "drag_and_drop", "description": "Drag an element from a source selector to a target selector. Uses HTML5 drag events.", "inputSchema": {"type": "object", "properties": {"source": {"type": "string"}, "target": {"type": "string"}}, "required": ["source", "target"]}},
-    {"name": "handle_dialog", "description": "Accept or dismiss a JavaScript dialog (alert, confirm, prompt). Also can type text into a prompt.", "inputSchema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["accept", "dismiss"], "default": "accept"}, "text": {"type": "string"}}}},
-    {"name": "get_markdown", "description": "Convert the current page content to structured Markdown. Headings, lists, tables, links, and code blocks are preserved semantically.", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string", "default": "body"}, "max_length": {"type": "number", "default": 10000}}}},
-    {"name": "snapshot", "description": "Capture the ARIA accessibility tree of the current page. Returns semantic roles, labels, and states (checked, disabled, expanded, value...). Use this to understand page structure before acting, or to verify what changed after an action.", "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "select_option", "description": "Select an option in a <select> dropdown by value, visible text, or index. Returns confirmation and updated page snapshot.", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string"}, "value": {"type": "string"}, "text": {"type": "string"}, "index": {"type": "number"}}, "required": ["selector"]}},
-    {"name": "file_upload", "description": "Upload a file to an <input type=\"file\"> element. Provide the file content as base64 and the filename.", "inputSchema": {"type": "object", "properties": {"selector": {"type": "string", "description": "CSS selector for the file input element"}, "filename": {"type": "string", "description": "Filename (e.g. 'document.pdf')"}, "mimeType": {"type": "string", "description": "MIME type (e.g. 'image/jpeg')", "default": "application/octet-stream"}, "base64Data": {"type": "string", "description": "Base64-encoded file content"}}, "required": ["selector", "filename", "base64Data"]}},
-    {"name": "resize_window", "description": "Resize the current browser window to specified dimensions", "inputSchema": {"type": "object", "properties": {"width": {"type": "number", "description": "Window width in pixels"}, "height": {"type": "number", "description": "Window height in pixels"}, "left": {"type": "number", "description": "Window left position in pixels"}, "top": {"type": "number", "description": "Window top position in pixels"}}}},
-    {"name": "computer", "description": "Computer-use style interaction: coordinate-based click/scroll, type text, or press keys. Returns a screenshot after each action for visual confirmation.", "inputSchema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["left_click", "right_click", "middle_click", "double_click", "mouse_move", "type", "key", "scroll"], "description": "Action to perform"}, "x": {"type": "number", "description": "X coordinate in pixels (for click/move/scroll actions)"}, "y": {"type": "number", "description": "Y coordinate in pixels (for click/move/scroll actions)"}, "text": {"type": "string", "description": "Text to type (for 'type' action)"}, "key": {"type": "string", "description": "Key combo to press, e.g. 'Enter', 'Control+a' (for 'key' action)"}, "direction": {"type": "string", "enum": ["up", "down", "left", "right"], "description": "Scroll direction (for 'scroll' action)", "default": "down"}, "amount": {"type": "number", "description": "Scroll amount in pixels (for 'scroll' action)", "default": 300}}, "required": ["action"]}},
-]
+TOOLS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools.json")
+
+
+def load_tools_file():
+    """tools.json next to relay.py is the shared source of truth with the extension."""
+    try:
+        with open(TOOLS_FILE, encoding="utf-8") as f:
+            tools = json.load(f)
+        return tools if isinstance(tools, list) and tools else None
+    except Exception:
+        return None
 
 
 def is_extension_connected() -> bool:
@@ -413,6 +378,38 @@ def call_extension_sync(msg: dict, timeout: float = 30.0, session_id: str = None
             pending_responses.pop(internal_id, None)
 
 
+TOOLS_CACHE_PATH = os.path.join(os.path.expanduser("~"), ".browser-mcp-x", "tools.json")
+
+
+def load_cached_tools():
+    try:
+        with open(TOOLS_CACHE_PATH, encoding="utf-8") as f:
+            tools = json.load(f)
+        return tools if isinstance(tools, list) and tools else None
+    except Exception:
+        return None
+
+
+def save_cached_tools(tools: list):
+    try:
+        os.makedirs(os.path.dirname(TOOLS_CACHE_PATH), exist_ok=True)
+        with open(TOOLS_CACHE_PATH, "w", encoding="utf-8") as f:
+            json.dump(tools, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[Browser MCP X] Could not cache tool list: {e}", file=sys.stderr)
+
+
+def get_tools_list() -> list:
+    """Live list from the extension; else tools.json; else the last list the extension reported."""
+    if is_extension_connected() or wait_for_extension(5.0):
+        resp = call_extension_sync({"jsonrpc": "2.0", "id": "tools-list", "method": "tools/list"}, timeout=10.0)
+        tools = resp.get("result", {}).get("tools")
+        if isinstance(tools, list) and tools:
+            save_cached_tools(tools)
+            return tools
+    return load_tools_file() or load_cached_tools() or []
+
+
 def send_stdio(msg: dict):
     sys.stdout.write(json.dumps(msg, ensure_ascii=False) + "\n")
     sys.stdout.flush()
@@ -448,12 +445,7 @@ def handle_stdio_message(msg: dict):
         return
 
     if method == "tools/list":
-        if is_extension_connected():
-            resp = call_extension_sync(msg, timeout=10.0)
-            if "error" not in resp:
-                send_stdio(resp)
-                return
-        send_stdio({"jsonrpc": "2.0", "id": msg_id, "result": {"tools": STATIC_TOOLS}})
+        send_stdio({"jsonrpc": "2.0", "id": msg_id, "result": {"tools": get_tools_list()}})
         return
 
     if method == "tools/call":
@@ -535,26 +527,7 @@ class StatusHandler(BaseHTTPRequestHandler):
             "extension_connected": bool(connected),
             "ws_port": WS_PORT,
             "mcp_port": MCP_PORT,
-            "tools": [
-                # Browser control
-                "navigate", "screenshot", "get_dom", "click", "type_text",
-                "extract_text", "scroll", "get_page_info",
-                # Page content
-                "get_links", "get_markdown",
-                # Tabs
-                "get_tabs", "switch_tab", "close_tab", "create_tab", "batch_execute",
-                # Forms
-                "fill_form", "detect_forms", "auto_fill_form", "drag_and_drop",
-                # Recording / playback
-                "start_recording", "stop_recording", "playback",
-                # Debugging
-                "evaluate", "wait", "press_key", "download_image", "get_console_logs",
-                "get_network_requests", "get_api_requests", "get_curl_command", "export_api_session", "handle_dialog",
-                # Smart interaction
-                "highlight", "wait_for_element", "get_interactive_elements",
-                "click_by_id", "type_by_id", "click_text", "hover",
-                "snapshot", "select_option"
-            ]
+            "tools": [t["name"] for t in (load_tools_file() or load_cached_tools() or [])],
         }
 
         self.send_response(200)
@@ -608,7 +581,10 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         session_id = self.headers.get(SESSION_HEADER) or "http-default"
         timeout = 55.0 if msg.get("method") == "tools/call" else 30.0
-        response = call_extension_sync(msg, timeout=timeout, session_id=session_id)
+        if msg.get("method") == "tools/list":
+            response = {"jsonrpc": "2.0", "id": msg.get("id"), "result": {"tools": get_tools_list()}}
+        else:
+            response = call_extension_sync(msg, timeout=timeout, session_id=session_id)
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")

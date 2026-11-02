@@ -14,9 +14,8 @@
 | **Setup** | 1 click + `python3 relay.py` | `npm install -g` + extension | `npm install playwright` + browser |
 | **Dependencies** | Python 3 (pre-installed) | Node.js + npm | Node.js + Playwright + browser binaries |
 | **User session** | ✅ Uses your logged-in tabs | ✅ Uses your logged-in tabs | ❌ Clean browser, no logins |
-| **Tools** | **44** (navigate, click, type, snapshot, computer, file_upload, resize_window, select_option, record, batch, forms, network, console, markdown, highlight, hover, drag-drop, dialogs, interactive elements, text-click...) | 20+ | ~10 |
+| **Tools** | **37** (navigate, click, type, snapshot, computer, file_upload, resize_window, select_option, batch, forms, network, console, markdown, hover, drag-drop, dialogs, interactive elements, text-click...) | 20+ | ~10 |
 | **Size** | ~50KB extension + 13KB relay | ~500KB extension + npm package | 300MB+ |
-| **Recording/Playback** | ✅ Built-in | ❌ | ❌ |
 | **Batch Execute** | ✅ Built-in | ❌ | ❌ |
 | **Network Capture** | ✅ Built-in | ❌ | ❌ |
 | **Markdown Export** | ✅ Built-in | ❌ | ❌ |
@@ -72,7 +71,6 @@ Click the Browser MCP X extension icon → **Start**
 |---|---|
 | `navigate` | Navigate to a URL |
 | `screenshot` | Capture visible tab |
-| `get_dom` | Extract simplified accessibility tree |
 | `snapshot` | Capture ARIA accessibility tree (roles, labels, states) |
 | `click` | Click element by CSS selector |
 | `type_text` | Type text into a form field |
@@ -87,16 +85,11 @@ Click the Browser MCP X extension icon → **Start**
 | `fill_form` | Fill multiple form fields at once |
 | `wait` | Wait N milliseconds |
 | `press_key` | Simulate keyboard input |
-| `get_links` | Extract all links from the page |
 
 ### Advanced Tools (Free)
 | Tool | Description |
 |---|---|
-| `start_recording` | Record browser actions |
-| `stop_recording` | Stop recording & return JSON |
-| `playback` | Replay recorded actions |
 | `detect_forms` | Auto-detect all forms with fields |
-| `auto_fill_form` | AI-fill a form with smart values |
 | `create_tab` | Open a new tab with optional URL |
 | `batch_execute` | Run multiple tool calls in sequence |
 | `get_console_logs` | Capture console logs (errors, warnings) |
@@ -108,7 +101,6 @@ Click the Browser MCP X extension icon → **Start**
 ### Pro Tools
 | Tool | Description |
 |---|---|
-| `highlight` | Visual element highlighting (red outline) |
 | `wait_for_element` | Auto-wait for element to appear |
 | `get_interactive_elements` | List all interactive elements with IDs |
 | `click_by_id` | Click element by assigned ID |
@@ -133,6 +125,8 @@ Chrome Extension (offscreen document)
     ↕ chrome.scripting API
 Browser Tab
 ```
+
+Tool definitions live in a single file, `tools.json`, read by both the extension (`tools/list`) and `relay.py` (fallback while the extension is not connected). To add or change a tool, edit `tools.json` and add its handler in `background.js`.
 
 ## Privacy
 

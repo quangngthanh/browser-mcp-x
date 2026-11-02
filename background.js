@@ -23,307 +23,18 @@ const INTERACTIVE_SELECTORS = {
 };
 
 // ─── MCP Tool Definitions ───
-const MCP_TOOLS = [
-  {
-    name: "navigate",
-    description: "Navigate the active tab to a URL",
-    inputSchema: { type: "object", properties: { url: { type: "string" } }, required: ["url"] }
-  },
-  {
-    name: "screenshot",
-    description: "Take a screenshot of the active tab",
-    inputSchema: { type: "object", properties: {} }
-  },
-  {
-    name: "get_dom",
-    description: "Extract the DOM structure of the active tab as text (simplified accessibility tree)",
-    inputSchema: { type: "object", properties: { selector: { type: "string", default: "body" } } }
-  },
-  {
-    name: "click",
-    description: "Click an element by CSS selector",
-    inputSchema: { type: "object", properties: { selector: { type: "string" } }, required: ["selector"] }
-  },
-  {
-    name: "type_text",
-    description: "Type text into an input, textarea, or contenteditable / rich-text editor. Uses native setters + insertText so React-controlled fields update.",
-    inputSchema: { type: "object", properties: { selector: { type: "string" }, text: { type: "string" } }, required: ["selector", "text"] }
-  },
-  {
-    name: "extract_text",
-    description: "Extract text content from the active tab, optionally from a specific selector",
-    inputSchema: { type: "object", properties: { selector: { type: "string", default: "body" } } }
-  },
-  {
-    name: "scroll",
-    description: "Scroll the page or a specific element (e.g. a dialog overlay) by a given amount",
-    inputSchema: { type: "object", properties: { direction: { type: "string", enum: ["up", "down"], default: "down" }, amount: { type: "number", default: 500 }, selector: { type: "string", description: "CSS selector of the scrollable container; omit to scroll the page" } } }
-  },
-  {
-    name: "get_tabs",
-    description: "List all open tabs with their IDs, titles, and URLs. Each agent session owns its own tab(s) in the BrowserMCPX group: the result includes your sessionId and currentTabId, and each tab has owner = 'you' | 'other-agent' | 'free'. Do not drive tabs owned by another agent.",
-    inputSchema: { type: "object", properties: {} }
-  },
-  {
-    name: "switch_tab",
-    description: "Make a BrowserMCPX group tab your session's current tab. Fails if the tab is outside the group or in use by another agent session.",
-    inputSchema: { type: "object", properties: { tabId: { type: "number" } }, required: ["tabId"] }
-  },
-  {
-    name: "close_tab",
-    description: "Close a tab by its ID",
-    inputSchema: { type: "object", properties: { tabId: { type: "number" } }, required: ["tabId"] }
-  },
-  {
-    name: "evaluate",
-    description: "Run JavaScript in the active tab. Awaits Promises. Objects are JSON-serialized.",
-    inputSchema: { type: "object", properties: { script: { type: "string" } }, required: ["script"] }
-  },
-  {
-    name: "get_page_info",
-    description: "Get metadata about the current page (title, URL, viewport size) plus the tabId and your agent sessionId",
-    inputSchema: { type: "object", properties: {} }
-  },
-  {
-    name: "fill_form",
-    description: "Fill multiple form fields at once. Pass an object of {selector: value} pairs.",
-    inputSchema: { type: "object", properties: { fields: { type: "object" } }, required: ["fields"] }
-  },
-  {
-    name: "wait",
-    description: "Wait for a specified number of milliseconds",
-    inputSchema: { type: "object", properties: { ms: { type: "number", default: 1000 } } }
-  },
-  {
-    name: "press_key",
-    description: "Press a key on the focused element. Supports combos like 'Enter', 'Escape', 'Control+a', 'Ctrl+Enter'.",
-    inputSchema: { type: "object", properties: { key: { type: "string" } }, required: ["key"] }
-  },
-  {
-    name: "download_image",
-    description: "Download a page image to the user's Downloads folder via canvas capture (avoids CORS). Prefer over fetch(img.src).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        selector: { type: "string", description: "CSS selector for <img>. If omitted or not found, downloads the largest image on the page." },
-        filename: { type: "string", description: "Filename, e.g. image.png" }
-      }
-    }
-  },
-  {
-    name: "get_links",
-    description: "Extract all links from the page with their text and href",
-    inputSchema: { type: "object", properties: {} }
-  },
-  // ─── Recording / Playback ───
-  {
-    name: "start_recording",
-    description: "Start recording browser actions (clicks, inputs, navigations) for later playback",
-    inputSchema: { type: "object", properties: {} }
-  },
-  {
-    name: "stop_recording",
-    description: "Stop recording and return the recorded action sequence as JSON",
-    inputSchema: { type: "object", properties: {} }
-  },
-  {
-    name: "playback",
-    description: "Replay a previously recorded action sequence. Pass the actions array from stop_recording.",
-    inputSchema: { type: "object", properties: { actions: { type: "array" }, speed: { type: "number", default: 1 } }, required: ["actions"] }
-  },
-  // ─── Form Detection ───
-  {
-    name: "detect_forms",
-    description: "Auto-detect all forms on the page with their fields, types, labels, and selectors",
-    inputSchema: { type: "object", properties: {} }
-  },
-  {
-    name: "auto_fill_form",
-    description: "Auto-fill a form with AI-generated values. Detects the form and suggests values based on field types/names.",
-    inputSchema: { type: "object", properties: { selector: { type: "string", default: "form" }, values: { type: "object" } } }
-  },
-  // ─── Multi-Tab Workflows ───
-  {
-    name: "create_tab",
-    description: "Create a new tab with an optional URL. The tab joins the BrowserMCPX group and is owned by your session (other agents will not take it); it becomes your current tab only if you have none yet. Opens in the background by default so it doesn't steal focus from the user; pass active=true to foreground it. Pass newWindow=true to open it in a separate Chrome window (same profile/session) instead of the current window.",
-    inputSchema: { type: "object", properties: { url: { type: "string" }, active: { type: "boolean", default: false }, newWindow: { type: "boolean", default: false } } }
-  },
-  {
-    name: "batch_execute",
-    description: "Execute multiple tool calls in sequence on a specific tab. Pass an array of {tool, args} objects.",
-    inputSchema: { type: "object", properties: { tabId: { type: "number" }, steps: { type: "array" } }, required: ["steps"] }
-  },
-  {
-    name: "get_console_logs",
-    description: "Capture console logs from the active tab (errors, warnings, logs)",
-    inputSchema: { type: "object", properties: { level: { type: "string", enum: ["error", "warn", "log", "all"], default: "all" } } }
-  },
-  {
-    name: "get_network_requests",
-    description: "Capture recent network requests from the active tab (URL, method, status, type, headers, payload)",
-    inputSchema: {
-      type: "object",
-      properties: {
-        filter: { type: "string", default: "" },
-        type: { type: "string", enum: ["all", "xmlhttprequest", "fetch", "script", "main_frame", "sub_frame"], default: "all" },
-        limit: { type: "number", default: 50 },
-        includeHeaders: { type: "boolean", default: true }
-      }
-    }
-  },
-  {
-    name: "get_api_requests",
-    description: "Capture API calls (XHR/Fetch) with full HTTP headers, Auth Tokens, parameters, and request body payloads for direct API re-play.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        filter: { type: "string", default: "" },
-        limit: { type: "number", default: 20 }
-      }
-    }
-  },
-  {
-    name: "get_curl_command",
-    description: "Generate a copy-pasteable cURL command for a captured network request (including auth headers and payload) to execute directly without UI.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        urlPattern: { type: "string" },
-        requestIndex: { type: "number", default: 0 }
-      },
-      required: ["urlPattern"]
-    }
-  },
-  {
-    name: "export_api_session",
-    description: "Export authentication cookies, bearer tokens, and headers for a domain. Returns JSON + ready-to-run Python requests script to call APIs headlessly.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        domain: { type: "string", default: "" }
-      }
-    }
-  },
-  // ─── Phase 1: Quick Wins ───
-  {
-    name: "highlight",
-    description: "Visually highlight an element with a colored border. Pass a CSS selector. Pass duration=0 to remove all highlights.",
-    inputSchema: { type: "object", properties: { selector: { type: "string" }, color: { type: "string", default: "#E55934" }, duration: { type: "number", default: 3000 } }, required: ["selector"] }
-  },
-  {
-    name: "wait_for_element",
-    description: "Wait until an element matching the CSS selector appears on the page. Auto-resolves when found or after timeout.",
-    inputSchema: { type: "object", properties: { selector: { type: "string" }, timeout: { type: "number", default: 10000 }, visible: { type: "boolean", default: true } }, required: ["selector"] }
-  },
-  {
-    name: "get_interactive_elements",
-    description: "List all interactive elements (buttons, links, inputs, selects) with numeric IDs. Use the returned ID with click_by_id or type_by_id.",
-    inputSchema: { type: "object", properties: { filter: { type: "string", enum: ["all", "buttons", "links", "inputs", "forms"], default: "all" } } }
-  },
-  {
-    name: "click_by_id",
-    description: "Click an element by its interactive ID (from get_interactive_elements). Much easier than CSS selectors.",
-    inputSchema: { type: "object", properties: { elementId: { type: "number" } }, required: ["elementId"] }
-  },
-  {
-    name: "type_by_id",
-    description: "Type text into the element with the given interactive ID (from get_interactive_elements).",
-    inputSchema: { type: "object", properties: { elementId: { type: "number" }, text: { type: "string" } }, required: ["elementId", "text"] }
-  },
-  {
-    name: "click_text",
-    description: "Click an element by its visible text content. e.g. click_text({text: 'Submit'}). Searches buttons, links, and all visible elements.",
-    inputSchema: { type: "object", properties: { text: { type: "string" }, partial: { type: "boolean", default: true } }, required: ["text"] }
-  },
-  {
-    name: "hover",
-    description: "Hover over an element by CSS selector. Triggers mouseenter/mouseover events.",
-    inputSchema: { type: "object", properties: { selector: { type: "string" } }, required: ["selector"] }
-  },
-  {
-    name: "drag_and_drop",
-    description: "Drag an element from a source selector to a target selector. Uses HTML5 drag events.",
-    inputSchema: { type: "object", properties: { source: { type: "string" }, target: { type: "string" } }, required: ["source", "target"] }
-  },
-  {
-    name: "handle_dialog",
-    description: "Accept or dismiss a JavaScript dialog (alert, confirm, prompt). Also can type text into a prompt.",
-    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["accept", "dismiss"], default: "accept" }, text: { type: "string" } } }
-  },
-  {
-    name: "get_markdown",
-    description: "Convert the current page content to structured Markdown. Headings, lists, tables, links, and code blocks are preserved semantically.",
-    inputSchema: { type: "object", properties: { selector: { type: "string", default: "body" }, max_length: { type: "number", default: 10000 } } }
-  },
-  {
-    name: "snapshot",
-    description: "Capture the ARIA accessibility tree of the current page. Returns semantic roles, labels, and states (checked, disabled, expanded, value...). Use this to understand page structure before acting, or to verify what changed after an action.",
-    inputSchema: { type: "object", properties: {} }
-  },
-  {
-    name: "select_option",
-    description: "Select an option in a <select> dropdown by value, visible text, or index. Returns confirmation and updated page snapshot.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        selector: { type: "string" },
-        value: { type: "string" },
-        text: { type: "string" },
-        index: { type: "number" }
-      },
-      required: ["selector"]
-    }
-  },
-  // ─── New tools ───
-  {
-    name: "file_upload",
-    description: "Upload a file to an <input type=\"file\"> element. Provide the file content as base64 and the filename.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        selector: { type: "string", description: "CSS selector for the file input element" },
-        filename: { type: "string", description: "Filename (e.g. 'document.pdf')" },
-        mimeType: { type: "string", description: "MIME type (e.g. 'image/jpeg')", default: "application/octet-stream" },
-        base64Data: { type: "string", description: "Base64-encoded file content" }
-      },
-      required: ["selector", "filename", "base64Data"]
-    }
-  },
-  {
-    name: "resize_window",
-    description: "Resize the current browser window to specified dimensions",
-    inputSchema: {
-      type: "object",
-      properties: {
-        width: { type: "number", description: "Window width in pixels" },
-        height: { type: "number", description: "Window height in pixels" },
-        left: { type: "number", description: "Window left position in pixels" },
-        top: { type: "number", description: "Window top position in pixels" }
-      }
-    }
-  },
-  {
-    name: "computer",
-    description: "Computer-use style interaction: screenshot, coordinate-based click/scroll, type text, or press keys. Returns a screenshot after each action for visual confirmation.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        action: {
-          type: "string",
-          enum: ["left_click", "right_click", "middle_click", "double_click", "mouse_move", "type", "key", "scroll"],
-          description: "Action to perform"
-        },
-        x: { type: "number", description: "X coordinate in pixels (for click/move/scroll actions)" },
-        y: { type: "number", description: "Y coordinate in pixels (for click/move/scroll actions)" },
-        text: { type: "string", description: "Text to type (for 'type' action)" },
-        key: { type: "string", description: "Key combo to press, e.g. 'Enter', 'Control+a' (for 'key' action)" },
-        direction: { type: "string", enum: ["up", "down", "left", "right"], description: "Scroll direction (for 'scroll' action)", default: "down" },
-        amount: { type: "number", description: "Scroll amount in pixels (for 'scroll' action)", default: 300 }
-      },
-      required: ["action"]
-    }
-  }
-];
+// Single source of truth shared with relay.py: tools.json at the repo root.
+let mcpToolsPromise = null;
+
+function loadMcpTools() {
+  mcpToolsPromise ??= fetch(chrome.runtime.getURL("tools.json"))
+    .then(r => r.json())
+    .catch(err => {
+      mcpToolsPromise = null;
+      throw err;
+    });
+  return mcpToolsPromise;
+}
 
 // ─── Agent Tab Lock ───
 // Each agent session (one relay/proxy process) owns its own tab inside the
@@ -582,9 +293,6 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   persistAgentContext();
 });
 
-// ─── Recording State ───
-let recordingState = { isRecording: false, actions: [], recordingTabId: null };
-
 // ─── Network/Console Capture State ───
 let consoleLogs = [];
 let networkRequests = [];
@@ -758,7 +466,7 @@ async function handleMcpRequest(message) {
         break;
 
       case "tools/list":
-        result = { tools: MCP_TOOLS };
+        result = { tools: await loadMcpTools() };
         break;
 
       case "tools/call":
@@ -869,7 +577,7 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
 
   if (tab) touchSession(sessionId, tab.id);
 
-  if (tab && tab.id) {
+  if (tab && tab.id && toolName !== "handle_dialog") {
     await showAgentFrame(tab.id);
   }
 
@@ -892,55 +600,6 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
       } catch (e) {
         return { content: [{ type: "text", text: `Screenshot failed: ${e.message}` }] };
       }
-    }
-
-    case "get_dom": {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: (sel) => {
-          const element = sel === "body" ? document.body : document.querySelector(sel);
-          if (!element) return "Element not found";
-          return buildAccessibleTree(element);
-          function buildAccessibleTree(el, depth = 0) {
-            if (!el || el.nodeType !== 1) return "";
-            const tag = el.tagName.toLowerCase();
-            const text = (el.textContent || "").trim().substring(0, 80);
-            const role = el.getAttribute("role") || "";
-            const aria = el.getAttribute("aria-label") || "";
-            const href = el.getAttribute("href") || "";
-            const name = el.getAttribute("name") || "";
-            const id = el.id || "";
-            const cls = el.className || "";
-            const rect = el.getBoundingClientRect();
-            const isInViewport = (
-              rect.top >= 0 &&
-              rect.left >= 0 &&
-              rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-              rect.right <= (window.innerWidth || document.documentElement.clientWidth) &&
-              rect.width > 0 &&
-              rect.height > 0
-            );
-            let indent = "  ".repeat(depth);
-            let line = `${indent}<${tag}`;
-            if (id) line += ` #${id}`;
-            if (cls) line += ` .${String(cls).substring(0, 40)}`;
-            if (role) line += ` [${role}]`;
-            if (aria) line += ` "${aria}"`;
-            if (href) line += ` href="${href.substring(0, 60)}"`;
-            if (name) line += ` name="${name}"`;
-            line += ` [inViewport=${isInViewport}]`;
-            if (text && text.length < 80 && el.children.length === 0) line += `>${text}</${tag}>`;
-            else line += `>`;
-            let result = line + "\n";
-            for (const child of el.children) {
-              if (depth < 5) result += buildAccessibleTree(child, depth + 1);
-            }
-            return result;
-          }
-        },
-        args: [args.selector || "body"]
-      });
-      return { content: [{ type: "text", text: results[0]?.result || "Empty" }] };
     }
 
     case "click": {
@@ -974,9 +633,6 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
         },
         args: [args.selector]
       });
-      if (recordingState.isRecording) {
-        recordingState.actions.push({ type: "click", selector: args.selector, timestamp: Date.now() });
-      }
       const clickSnap = await captureAriaSnapshot(tab.id);
       return { content: [{ type: "text", text: results[0]?.result }, { type: "text", text: clickSnap }] };
     }
@@ -1029,9 +685,6 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
         },
         args: [args.selector, args.text]
       });
-      if (recordingState.isRecording) {
-        recordingState.actions.push({ type: "type", selector: args.selector, text: args.text, timestamp: Date.now() });
-      }
       const typeSnap = await captureAriaSnapshot(tab.id);
       return { content: [{ type: "text", text: results[0]?.result }, { type: "text", text: typeSnap }] };
     }
@@ -1422,9 +1075,6 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
         } finally {
           await chrome.debugger.detach(target).catch(() => {});
         }
-        if (recordingState.isRecording) {
-          recordingState.actions.push({ type: "key", key: args.key, timestamp: Date.now() });
-        }
         return { content: [{ type: "text", text: `Pressed ${keyCombo} via cdp` }] };
       } catch (e) {
         // Fallback synthetic
@@ -1453,169 +1103,6 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
       }
     }
 
-    case "get_links": {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          return Array.from(document.querySelectorAll("a[href]")).slice(0, 100).map(a => ({
-            text: (a.textContent || "").trim().substring(0, 80),
-            href: a.href
-          }));
-        }
-      });
-      return { content: [{ type: "text", text: JSON.stringify(results[0]?.result, null, 2) }] };
-    }
-
-    // ─── Recording / Playback ───
-    case "start_recording": {
-      recordingState = { isRecording: true, actions: [], recordingTabId: tab.id };
-      // Inject recording listener. We record clicks, inputs, and keydowns.
-      // The listener sends actions back to the service worker via a named global
-      // that stop_recording can read, and also attempts runtime.sendMessage.
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          if (window.__browserMcpRecording) return "already recording";
-          window.__browserMcpRecording = true;
-          window.__browserMcpActions = [];
-
-          function pushAction(action) {
-            window.__browserMcpActions.push(action);
-            // Best-effort live forwarding to service worker (may fail if extension reloaded)
-            try {
-              if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
-                chrome.runtime.sendMessage({ type: "RECORDING_ACTION", action }).catch(() => {});
-              }
-            } catch (e) {}
-          }
-
-          function selectorFor(el) {
-            if (!el) return "";
-            if (el.id) return `#${el.id}`;
-            if (el.name) return `${el.tagName.toLowerCase()}[name="${el.name}"]`;
-            if (el.className) {
-              const cls = String(el.className).split(" ").filter(c => c).slice(0, 2).join(".");
-              if (cls) return `${el.tagName.toLowerCase()}.${cls}`;
-            }
-            return el.tagName.toLowerCase();
-          }
-
-          const clickHandler = (e) => {
-            pushAction({
-              type: "click",
-              selector: selectorFor(e.target),
-              tag: e.target?.tagName?.toLowerCase() || "",
-              text: (e.target?.textContent || "").trim().substring(0, 40),
-              timestamp: Date.now()
-            });
-          };
-
-          const inputHandler = (e) => {
-            const target = e.target;
-            if (!target?.value && target?.value !== "") return;
-            pushAction({
-              type: "type",
-              selector: selectorFor(target),
-              text: String(target.value || "").substring(0, 200),
-              tag: target?.tagName?.toLowerCase() || "",
-              timestamp: Date.now()
-            });
-          };
-
-          const keyHandler = (e) => {
-            pushAction({
-              type: "key",
-              key: e.key,
-              selector: selectorFor(e.target),
-              timestamp: Date.now()
-            });
-          };
-
-          document.addEventListener("click", clickHandler, true);
-          document.addEventListener("input", inputHandler, true);
-          document.addEventListener("keydown", keyHandler, true);
-
-          window.__browserMcpStopRecording = () => {
-            document.removeEventListener("click", clickHandler, true);
-            document.removeEventListener("input", inputHandler, true);
-            document.removeEventListener("keydown", keyHandler, true);
-            window.__browserMcpRecording = false;
-            const actions = window.__browserMcpActions || [];
-            window.__browserMcpActions = [];
-            return actions;
-          };
-
-          return "recording started";
-        }
-      });
-      return { content: [{ type: "text", text: "Recording started. Interact with the page — actions are being captured." }] };
-    }
-
-    case "stop_recording": {
-      if (!recordingState.isRecording) {
-        return { content: [{ type: "text", text: "Not recording." }] };
-      }
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: recordingState.recordingTabId || tab.id },
-        func: () => {
-          if (typeof window.__browserMcpStopRecording === "function") {
-            const actions = window.__browserMcpStopRecording();
-            return { stopped: true, actions };
-          }
-          const actions = window.__browserMcpActions || [];
-          window.__browserMcpRecording = false;
-          window.__browserMcpActions = [];
-          return { stopped: false, actions };
-        }
-      });
-      const data = results[0]?.result || { actions: [] };
-      recordingState.isRecording = false;
-      // Merge service-worker recorded actions (from our own tools) with content-script captured actions.
-      const contentActions = data.actions || [];
-      const allActions = [...recordingState.actions || [], ...contentActions];
-      // Deduplicate by timestamp (1ms resolution)
-      const seen = new Set();
-      const deduped = [];
-      for (const a of allActions) {
-        const key = `${a.type}:${a.selector || a.key || a.text}:${a.timestamp}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        deduped.push(a);
-      }
-      recordingState.actions = [];
-      deduped.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-      return { content: [{ type: "text", text: JSON.stringify({ recorded: deduped.length, actions: deduped }, null, 2) }] };
-    }
-
-    case "playback": {
-      const actions = args.actions || [];
-      const speed = args.speed || 1;
-      for (const action of actions) {
-        const delay = 500 / speed;
-        await new Promise(r => setTimeout(r, delay));
-        if (action.type === "click") {
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: (sel) => { const el = document.querySelector(sel); if (el) el.click(); },
-            args: [action.selector]
-          });
-        } else if (action.type === "type") {
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: (sel, text) => {
-              const el = document.querySelector(sel);
-              if (el) { el.focus(); el.value = text; el.dispatchEvent(new Event("input", { bubbles: true })); }
-            },
-            args: [action.selector, action.text]
-          });
-        } else if (action.type === "navigate") {
-          await chrome.tabs.update(tab.id, { url: action.url });
-          await waitForTabLoad(tab.id);
-        }
-      }
-      return { content: [{ type: "text", text: `Playback complete: ${actions.length} actions executed.` }] };
-    }
-
     // ─── Form Detection ───
     case "detect_forms": {
       const results = await chrome.scripting.executeScript({
@@ -1639,34 +1126,6 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
         }
       });
       return { content: [{ type: "text", text: JSON.stringify(results[0]?.result || [], null, 2) }] };
-    }
-
-    case "auto_fill_form": {
-      const selector = args.selector || "form";
-      const values = args.values || {};
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: (sel, vals) => {
-          const form = document.querySelector(sel);
-          if (!form) return `Form not found: ${sel}`;
-          const fields = Array.from(form.querySelectorAll("input, select, textarea"));
-          const filled = [];
-          for (const el of fields) {
-            const key = el.id || el.name || el.type;
-            const val = vals[key] || vals[el.name] || vals[el.id] || "";
-            if (val) {
-              el.focus();
-              el.value = val;
-              el.dispatchEvent(new Event("input", { bubbles: true }));
-              el.dispatchEvent(new Event("change", { bubbles: true }));
-              filled.push(`${key}="${val}"`);
-            }
-          }
-          return `Filled ${filled.length} fields: ${filled.join(", ")}`;
-        },
-        args: [selector, values]
-      });
-      return { content: [{ type: "text", text: results[0]?.result }] };
     }
 
     // ─── Multi-Tab Workflows ───
@@ -1929,41 +1388,6 @@ session.headers.update(headers)
     }
 
     // ─── Phase 1: Quick Wins ───
-
-    case "highlight": {
-      const { selector, color = "#E55934", duration = 3000 } = args;
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: (sel, col, dur) => {
-          // Remove existing highlights
-          document.querySelectorAll("[data-mcp-highlight]").forEach(el => {
-            el.style.outline = el.dataset.mcpPrevOutline || "";
-            delete el.dataset.mcpHighlight;
-            delete el.dataset.mcpPrevOutline;
-          });
-          if (dur === 0) return "Highlights removed";
-
-          const el = document.querySelector(sel);
-          if (!el) return `Element not found: ${sel}`;
-          el.dataset.mcpPrevOutline = el.style.outline || "";
-          el.dataset.mcpHighlight = "true";
-          el.style.outline = `3px solid ${col}`;
-          el.style.outlineOffset = "2px";
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-
-          if (dur > 0) {
-            setTimeout(() => {
-              el.style.outline = el.dataset.mcpPrevOutline || "";
-              delete el.dataset.mcpHighlight;
-              delete el.dataset.mcpPrevOutline;
-            }, dur);
-          }
-          return `Highlighted: ${sel}`;
-        },
-        args: [selector, color, duration]
-      });
-      return { content: [{ type: "text", text: results[0]?.result }] };
-    }
 
     case "wait_for_element": {
       const { selector, timeout = 10000, visible = true } = args;
@@ -2232,23 +1656,41 @@ session.headers.update(headers)
     }
 
     case "handle_dialog": {
-      const { action = "accept", text: dialogText } = args;
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: (act, txt) => {
-          window.__mcpDialogAction = act;
-          window.__mcpDialogText = txt || "";
-          if (!window.__mcpDialogOverridden) {
-            window.__mcpDialogOverridden = true;
-            window.alert = () => {};
-            window.confirm = () => act === "accept";
-            window.prompt = (msg, def) => txt || def || "";
-          }
-          return `Dialog handler set: ${act}${txt ? ` (text: "${txt}")` : ""}`;
+      const accept = args.action !== "dismiss";
+      const promptText = args.text || "";
+      const target = { tabId: tab.id };
+      let handledOpen = false;
+      try {
+        await chrome.debugger.detach(target).catch(() => {});
+        await withTimeout(chrome.debugger.attach(target, "1.3"), 5000, "debugger.attach");
+        try {
+          await chrome.debugger.sendCommand(target, "Page.enable");
+          await withTimeout(
+            chrome.debugger.sendCommand(target, "Page.handleJavaScriptDialog", { accept, promptText }),
+            3000,
+            "Page.handleJavaScriptDialog"
+          );
+          handledOpen = true;
+        } catch (e) { /* no dialog is open */ } finally {
+          chrome.debugger.detach(target).catch(() => {});
+        }
+      } catch (e) { /* debugger unavailable, fall back to overrides */ }
+
+      if (handledOpen) {
+        return { content: [{ type: "text", text: `Open dialog ${accept ? "accepted" : "dismissed"}${promptText ? ` (text: "${promptText}")` : ""}` }] };
+      }
+
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id, allFrames: true },
+        world: "MAIN",
+        func: (acc, txt) => {
+          window.alert = () => {};
+          window.confirm = () => acc;
+          window.prompt = (msg, def) => (acc ? (txt || def || "") : null);
         },
-        args: [action, dialogText || ""]
+        args: [accept, promptText]
       });
-      return { content: [{ type: "text", text: results[0]?.result }] };
+      return { content: [{ type: "text", text: `No open dialog. Future dialogs on this page will be ${accept ? "accepted" : "dismissed"}${promptText ? ` (prompt text: "${promptText}")` : ""} until it navigates.` }] };
     }
 
     case "get_markdown": {
@@ -2786,14 +2228,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "STOP_SERVER") {
     stopServer().then(() => sendResponse({ ok: true }));
     return true;
-  }
-
-  if (msg.type === "RECORDING_ACTION") {
-    if (recordingState.isRecording) {
-      recordingState.actions.push(msg.action);
-    }
-    sendResponse({ ok: true });
-    return false;
   }
 
 });

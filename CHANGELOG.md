@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **`get_dom`** — superseded by `snapshot` (ARIA tree) and `get_markdown`
+- **`get_links`** — covered by `get_markdown` and `get_interactive_elements` (`filter: "links"`)
+- **`start_recording` / `stop_recording` / `playback`** — unreliable on SPAs and not useful to agents
+- **`auto_fill_form`** — duplicate of `fill_form` with a misleading description
+- **`highlight`** — visual-only, no value to agents
+
+### Changed
+- **Tool definitions** — moved to `tools.json`, the single source read by both the extension and `relay.py`; the hardcoded tool list in the relay is gone
+
+### Fixed
+- **`handle_dialog`** — now answers an already-open dialog via CDP `Page.handleJavaScriptDialog`; future-dialog overrides run in the page's MAIN world (previously the isolated world, so they had no effect)
+- **Multi-agent isolation** — concurrent agents get their own session and tab instead of colliding
+
 ### Added
 - **`snapshot`** — Capture ARIA accessibility tree (roles, labels, states) for the current page
 - **`select_option`** — Select a `<select>` option by value, text, or index (returns updated snapshot)
