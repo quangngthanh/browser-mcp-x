@@ -205,85 +205,6 @@
       font-size: 12px;
       color: var(--text-dim);
     }
-    .tool-card.pro {
-      border-color: var(--amber);
-    }
-    .tool-card.pro h3::after {
-      content: " PRO";
-      font-size: 9px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: var(--amber);
-      color: #0F1512;
-      vertical-align: middle;
-      margin-left: 6px;
-    }
-
-    /* ─── Pricing ─── */
-    .pricing {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 24px;
-      max-width: 700px;
-      margin: 0 auto;
-    }
-    .price-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 32px;
-      text-align: center;
-      position: relative;
-    }
-    .price-card.featured {
-      border-color: var(--green);
-      box-shadow: 0 0 40px rgba(82, 183, 136, 0.1);
-    }
-    .price-card .price-name {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--text-dim);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 8px;
-    }
-    .price-card .price-amount {
-      font-size: 3rem;
-      font-weight: 900;
-      margin-bottom: 4px;
-    }
-    .price-card .price-period {
-      font-size: 14px;
-      color: var(--text-muted);
-      margin-bottom: 24px;
-    }
-    .price-card ul {
-      list-style: none;
-      text-align: left;
-      margin-bottom: 24px;
-    }
-    .price-card li {
-      padding: 8px 0;
-      font-size: 14px;
-      color: var(--text-dim);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .price-card li::before {
-      content: "✓";
-      color: var(--green);
-      font-weight: 700;
-    }
-    .price-card li.no::before {
-      content: "✗";
-      color: var(--text-muted);
-    }
-    .price-card li.no { color: var(--text-muted); }
-    .price-card .btn {
-      width: 100%;
-      justify-content: center;
-    }
 
     /* ─── Quick Start ─── */
     .quickstart {
@@ -327,40 +248,6 @@
       color: var(--text);
     }
 
-    /* ─── License Activation ─── */
-    .license-section {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 32px;
-      max-width: 500px;
-      margin: 0 auto;
-      text-align: center;
-    }
-    .license-input {
-      width: 100%;
-      padding: 14px 16px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--bg);
-      color: var(--text);
-      font-size: 16px;
-      font-family: 'Courier New', monospace;
-      text-align: center;
-      text-transform: uppercase;
-      margin-bottom: 12px;
-      box-sizing: border-box;
-    }
-    .license-input:focus {
-      outline: none;
-      border-color: var(--green);
-    }
-    .license-note {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 8px;
-    }
-
     /* ─── Footer ─── */
     .footer {
       text-align: center;
@@ -400,7 +287,6 @@
   <p>Turn Chrome into an MCP server. Let AI agents control your browser. 37 tools. No npm. No dependencies.</p>
   <div class="hero-cta">
     <a class="btn btn-secondary" href="#install">Install</a>
-    <a class="btn btn-amber" href="#pro">Get Pro — $9</a>
   </div>
   <div class="stats">
     <div class="stat">
@@ -529,79 +415,19 @@
     <div class="tool-card"><h3>get_api_requests</h3><p>Capture API calls & Auth</p></div>
     <div class="tool-card"><h3>get_curl_command</h3><p>Export cURL command</p></div>
     <div class="tool-card"><h3>export_api_session</h3><p>Export Session & Python Script</p></div>
-    <div class="tool-card pro"><h3>wait_for_element</h3><p>Auto-wait for element</p></div>
-    <div class="tool-card pro"><h3>get_interactive_elements</h3><p>List elements with IDs</p></div>
-    <div class="tool-card pro"><h3>click_by_id</h3><p>Click by element ID</p></div>
-    <div class="tool-card pro"><h3>type_by_id</h3><p>Type by element ID</p></div>
-    <div class="tool-card pro"><h3>click_text</h3><p>Click by visible text</p></div>
-    <div class="tool-card pro"><h3>hover</h3><p>Hover over element</p></div>
-    <div class="tool-card pro"><h3>drag_and_drop</h3><p>Drag element A to B</p></div>
-    <div class="tool-card pro"><h3>handle_dialog</h3><p>Accept/dismiss dialogs</p></div>
-    <div class="tool-card pro"><h3>get_markdown</h3><p>Export page as Markdown</p></div>
-    <div class="tool-card pro"><h3>file_upload</h3><p>Upload file to &lt;input type="file"&gt; via base64</p></div>
-    <div class="tool-card pro"><h3>resize_window</h3><p>Resize the browser window</p></div>
-    <div class="tool-card pro"><h3>computer</h3><p>Coordinate-based click/scroll/type + screenshot</p></div>
-  </div>
-</section>
-
-<!-- ═══ Pricing ═══ -->
-<section class="section" id="pro">
-  <h2>Simple Pricing</h2>
-  <p class="section-subtitle">Free forever. Pro is a one-time purchase.</p>
-  <div class="pricing">
-    <div class="price-card">
-      <div class="price-name">Free</div>
-      <div class="price-amount">$0</div>
-      <div class="price-period">forever</div>
-      <ul>
-        <li>27 MCP tools (Core + Advanced)</li>
-        <li>Navigate, click, type, screenshot</li>
-        <li>Recording & Playback</li>
-        <li>Batch Execute</li>
-        <li>Console & Network Capture</li>
-        <li>Form Detection & Auto-Fill</li>
-        <li class="no">10 Pro Tools</li>
-        <li class="no">Element Highlighting</li>
-        <li class="no">Markdown Export</li>
-      </ul>
-      <a class="btn btn-secondary" href="#install">Get Started</a>
-    </div>
-    <div class="price-card featured">
-      <div class="price-name">⭐ Pro</div>
-      <div class="price-amount">$9</div>
-      <div class="price-period">one-time purchase</div>
-      <ul>
-        <li>Everything in Free</li>
-        <li>10 additional Pro tools</li>
-        <li>Element Highlighting</li>
-        <li>Auto-Wait for Elements</li>
-        <li>Interactive Element IDs</li>
-        <li>Click by Text / ID</li>
-        <li>Hover & Drag-and-Drop</li>
-        <li>Dialog Handling</li>
-        <li>Markdown Export</li>
-      </ul>
-      <a class="btn btn-amber" href="https://quangngthanh.lemonsqueezy.com/checkout/buy/ee56313d-60e1-4181-9b5b-48a9183f469c" target="_blank" rel="noopener">Get Pro — €9</a>
-    </div>
-  </div>
-</section>
-
-<!-- ═══ Buy / License Activation ═══ -->
-<section class="section" id="buy">
-  <h2>Activate Pro</h2>
-  <p class="section-subtitle">Purchase a license key and activate it in the extension popup.</p>
-  <div class="license-section">
-    <p style="margin-bottom: 20px; color: var(--text-dim);">
-      <strong style="color: var(--text);">Step 1:</strong> Click "Buy Pro" below to purchase via LemonSqueezy.<br>
-      <strong style="color: var(--text);">Step 2:</strong> You'll receive a license key by email (32 characters, groups of 8, hyphenated).<br>
-      <strong style="color: var(--text);">Step 3:</strong> Paste it into the Browser MCP X extension popup → Pro section → Activate.
-    </p>
-    <a class="btn btn-amber" href="https://quangngthanh.lemonsqueezy.com/checkout/buy/ee56313d-60e1-4181-9b5b-48a9183f469c" target="_blank" rel="noopener" style="width: 100%; justify-content: center; margin-bottom: 16px;">
-      💳 Buy Browser MCP X Pro — €9
-    </a>
-    <p class="license-note">
-      One-time payment · Lifetime license · Works offline · No subscription
-    </p>
+    <div class="tool-card"><h3>wait_for_element</h3><p>Auto-wait for element</p></div>
+    <div class="tool-card"><h3>get_interactive_elements</h3><p>List elements with IDs</p></div>
+    <div class="tool-card"><h3>click_by_id</h3><p>Click by element ID</p></div>
+    <div class="tool-card"><h3>type_by_id</h3><p>Type by element ID</p></div>
+    <div class="tool-card"><h3>click_text</h3><p>Click by visible text</p></div>
+    <div class="tool-card"><h3>hover</h3><p>Hover over element</p></div>
+    <div class="tool-card"><h3>drag_and_drop</h3><p>Drag element A to B</p></div>
+    <div class="tool-card"><h3>handle_dialog</h3><p>Accept/dismiss dialogs</p></div>
+    <div class="tool-card"><h3>get_markdown</h3><p>Export page as Markdown</p></div>
+    <div class="tool-card"><h3>file_upload</h3><p>Upload file to &lt;input type="file"&gt; via base64</p></div>
+    <div class="tool-card"><h3>resize_window</h3><p>Resize the browser window</p></div>
+    <div class="tool-card"><h3>computer</h3><p>Coordinate-based click/scroll/type + screenshot</p></div>
+    <div class="tool-card"><h3>download_image</h3><p>Download a page image</p></div>
   </div>
 </section>
 
@@ -655,11 +481,10 @@ Browser Tab</code></pre>
 <!-- ═══ Footer ═══ -->
 <footer class="footer">
   <div class="footer-links">
-    <a href="#pro">Pricing</a>
     <a href="#install">Install</a>
     <a href="https://modelcontextprotocol.io">MCP Protocol</a>
   </div>
-  <p>Browser MCP X v0.4.0 · MIT License</p>
+  <p>Browser MCP X v0.4.1 · MIT License</p>
 </footer>
 
 </body>

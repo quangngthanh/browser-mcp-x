@@ -17,7 +17,7 @@ Browser MCP X turns Chrome into an MCP server (Model Context Protocol). Connect 
 
 **Advanced:** detect_forms, create_tab, batch_execute, get_console_logs, get_network_requests, get_api_requests, get_curl_command, export_api_session
 
-**Pro:** wait_for_element, get_interactive_elements, click_by_id, type_by_id, click_text, hover, drag_and_drop, handle_dialog, get_markdown
+**Interaction:** wait_for_element, get_interactive_elements, click_by_id, type_by_id, click_text, hover, drag_and_drop, handle_dialog, get_markdown, file_upload, resize_window, computer, download_image
 
 ### Why Browser MCP X?
 
