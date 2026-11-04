@@ -205,7 +205,7 @@ class ExtensionClient:
     def close(self):
         try:
             self.conn.close()
-        except:
+        except Exception:
             pass
         self.alive = False
 
@@ -229,21 +229,41 @@ def handle_extension_connection(conn, addr):
         "params": {"clientInfo": {"name": "browser-mcp-relay", "version": VERSION}}
     })
 
-    # Read the WebSocket handshake first
+    # Read the WebSocket handshake first (until end of HTTP headers)
     try:
-        handshake_data = conn.recv(4096).decode("utf-8")
-        if "Sec-WebSocket-Key" in handshake_data:
-            key = handshake_data.split("Sec-WebSocket-Key: ")[1].split("\r\n")[0].strip()
-            accept = base64.b64encode(
-                hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()
-            ).decode()
-            response = (
-                "HTTP/1.1 101 Switching Protocols\r\n"
-                "Upgrade: websocket\r\n"
-                "Connection: Upgrade\r\n"
-                f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
-            )
-            conn.sendall(response.encode())
+        raw = b""
+        while b"\r\n\r\n" not in raw and len(raw) < 16384:
+            chunk = conn.recv(4096)
+            if not chunk:
+                break
+            raw += chunk
+        handshake_data = raw.decode("utf-8", errors="replace")
+        headers = {}
+        for line in handshake_data.split("\r\n")[1:]:
+            if ":" in line:
+                k, v = line.split(":", 1)
+                headers[k.strip().lower()] = v.strip()
+        # A web page can open ws://127.0.0.1 too; only the extension may connect.
+        origin = headers.get("origin")
+        if origin is not None and not origin.startswith("chrome-extension://"):
+            print(f"[Browser MCP X] Rejected WebSocket from origin {origin}", file=sys.stderr)
+            conn.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
+            conn.close()
+            return
+        key = headers.get("sec-websocket-key")
+        if not key:
+            conn.close()
+            return
+        accept = base64.b64encode(
+            hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest()
+        ).decode()
+        response = (
+            "HTTP/1.1 101 Switching Protocols\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
+        )
+        conn.sendall(response.encode())
     except Exception as e:
         print(f"[Browser MCP X] Handshake error: {e}", file=sys.stderr)
         conn.close()
@@ -504,22 +524,25 @@ def handle_stdio():
 # ─── HTTP status endpoint (for health checks) ───
 
 class StatusHandler(BaseHTTPRequestHandler):
+    def _local_request_only(self) -> bool:
+        """Block browsers/web pages: no Origin header, and Host must be loopback
+        (defeats cross-site fetch and DNS-rebinding against the local API)."""
+        if self.headers.get("Origin") is not None:
+            return False
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
+        return host in ("127.0.0.1", "localhost", "::1")
+
+    def _forbid(self):
+        self.send_response(403)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"error": "Forbidden"}).encode())
+
     def do_GET(self):
+        if not self._local_request_only():
+            return self._forbid()
         with extension_lock:
             connected = extension_client and extension_client.alive
-
-        if self.path == "/license":
-            # Ask the extension for current license status.
-            license_resp = call_extension_sync({
-                "jsonrpc": "2.0", "id": "license-status", "method": "tools/call",
-                "params": {"name": "evaluate", "arguments": {"script": "JSON.stringify({valid: typeof proLicenseValid !== 'undefined' ? proLicenseValid : false, key: typeof proLicenseKey !== 'undefined' ? proLicenseKey : null, hasStorage: !!chrome.storage})"}}
-            }, timeout=5.0)
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.end_headers()
-            self.wfile.write(json.dumps(license_resp, indent=2).encode())
-            return
 
         status = {
             "name": "browser-mcp-x",
@@ -532,11 +555,12 @@ class StatusHandler(BaseHTTPRequestHandler):
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(json.dumps(status, indent=2).encode())
 
     def do_POST(self):
+        if not self._local_request_only():
+            return self._forbid()
         if self.path == "/restart-ws":
             global extension_client
             with extension_lock:
@@ -546,7 +570,6 @@ class StatusHandler(BaseHTTPRequestHandler):
                 extension_client = None
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps({
                 "restarted": was_connected,
@@ -570,7 +593,6 @@ class StatusHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_response(400)
             self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps({
                 "jsonrpc": "2.0",
@@ -587,7 +609,6 @@ class StatusHandler(BaseHTTPRequestHandler):
             response = call_extension_sync(msg, timeout=timeout, session_id=session_id)
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(json.dumps(response, ensure_ascii=False).encode("utf-8"))
 
@@ -599,7 +620,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
 def start_http_status():
-    server = ThreadedHTTPServer(("0.0.0.0", MCP_PORT), StatusHandler)
+    server = ThreadedHTTPServer(("127.0.0.1", MCP_PORT), StatusHandler)
     server.serve_forever()
 
 

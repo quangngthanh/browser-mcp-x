@@ -3,6 +3,7 @@
   "version": "0.4.1",
   "description": "Turn Chrome into an MCP server. AI agents control your browser: navigate, click, type, screenshot. Zero setup.",
   "manifest_version": 3,
+  "homepage_url": "https://github.com/quangngthanh/browser-mcp-x",
   "permissions": [
     "activeTab",
     "tabs",
@@ -35,6 +36,6 @@
     "128": "icons/icon128.png"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://localhost:* ws://127.0.0.1:* http://localhost:* http://127.0.0.1:* https://api.lemonsqueezy.com;"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' ws://localhost:* ws://127.0.0.1:* http://localhost:* http://127.0.0.1:*;"
   }
 }
