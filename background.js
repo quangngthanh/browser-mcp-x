@@ -103,7 +103,9 @@ async function loadAgentContext() {
         if (!owned.includes(id) && await tabExists(id)) owned.push(id);
       }
       if (owned.includes(entry.tabId)) {
-        sessionTabs.set(sessionId, { tabId: entry.tabId, ownedTabIds: owned, lastUsed: entry.lastUsed });
+        const restored = { tabId: entry.tabId, ownedTabIds: owned, lastUsed: entry.lastUsed };
+        if (entry.placeholderTabId === entry.tabId) restored.placeholderTabId = entry.tabId;
+        sessionTabs.set(sessionId, restored);
       }
     }
   }
@@ -232,6 +234,8 @@ async function resolveAgentTab(sessionId) {
     console.error("[Browser MCP X] Failed to group AI tab:", err);
   }
   claimTab(sessionId, newTab.id);
+  sessionTabs.get(sessionId).placeholderTabId = newTab.id;
+  persistAgentContext();
   return newTab;
 }
 
@@ -246,6 +250,28 @@ function switchSessionTab(sessionId, tabId) {
       throw new Error(`Tab ${tabId} is in use by another agent session`);
     }
     claimTab(sessionId, tabId);
+  });
+}
+
+function isBlankTab(tab) {
+  const blank = u => !u || u === "about:blank";
+  return blank(tab.url) && blank(tab.pendingUrl);
+}
+
+function takePlaceholderTab(sessionId, windowId) {
+  return withAgentLock(async () => {
+    await ensureAgentContext();
+    const own = sessionTabs.get(sessionId);
+    const placeholderId = own?.placeholderTabId;
+    if (placeholderId == null) return null;
+    delete own.placeholderTabId;
+    persistAgentContext();
+    if (own.tabId !== placeholderId) return null;
+    await resolveAgentGroup();
+    const tab = await chrome.tabs.get(placeholderId).catch(() => null);
+    const usable = tab && aiGroupId !== null && tab.groupId === aiGroupId && isBlankTab(tab)
+      && (windowId == null || tab.windowId === windowId);
+    return usable ? tab : null;
   });
 }
 
@@ -1133,20 +1159,30 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
       const url = args.url || "about:blank";
       const active = args.active === true;
       let newTab;
+      let reused = false;
       if (args.newWindow) {
         const newWin = await chrome.windows.create({ url, active, focused: active });
         newTab = newWin.tabs[0];
       } else {
         const windowId = tab ? tab.windowId : undefined;
-        newTab = await chrome.tabs.create({ windowId, url, active });
+        const placeholder = args.url ? await takePlaceholderTab(sessionId, windowId) : null;
+        if (placeholder) {
+          newTab = await chrome.tabs.update(placeholder.id, { url, active });
+          reused = true;
+        } else {
+          newTab = await chrome.tabs.create({ windowId, url, active });
+        }
       }
-      try {
-        await registerCreatedTab(sessionId, newTab.id, !args.newWindow);
-      } catch (e) {
-        console.warn("[Browser MCP X] Failed to register created tab:", e);
+      if (!reused) {
+        try {
+          await registerCreatedTab(sessionId, newTab.id, !args.newWindow);
+        } catch (e) {
+          console.warn("[Browser MCP X] Failed to register created tab:", e);
+        }
       }
       if (args.url) await waitForTabLoad(newTab.id);
-      return { content: [{ type: "text", text: `Created tab ${newTab.id} with URL: ${url}${args.newWindow ? " (new window)" : ""}` }] };
+      const note = reused ? " (reused your auto-created blank tab)" : args.newWindow ? " (new window)" : "";
+      return { content: [{ type: "text", text: `Created tab ${newTab.id} with URL: ${url}${note}` }] };
     }
 
     case "batch_execute": {
