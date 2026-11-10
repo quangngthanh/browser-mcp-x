@@ -315,6 +315,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   releaseTab(tabId, null);
   tabLastUsed.delete(tabId);
+  activeManipulatedTabIds.delete(tabId);
   interactiveElementCache.delete(tabId);
   persistAgentContext();
 });
@@ -603,7 +604,7 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
 
   if (tab) touchSession(sessionId, tab.id);
 
-  if (tab && tab.id && toolName !== "handle_dialog") {
+  if (tab && tab.id && !["handle_dialog", "close_tab", "switch_tab"].includes(toolName)) {
     await showAgentFrame(tab.id);
   }
 
@@ -932,6 +933,7 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
       }
       await switchSessionTab(sessionId, Number(targetTabId));
       await chrome.tabs.update(Number(targetTabId), { active: true });
+      await showAgentFrame(Number(targetTabId));
       return { content: [{ type: "text", text: `Switched to tab ${targetTabId}` }] };
     }
 
@@ -2277,6 +2279,8 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
 // Restore running state when Chrome wakes/restarts the MV3 service worker.
 chrome.runtime.onStartup.addListener(async () => {
+  // Tab IDs are reassigned after a browser restart, so stale IDs would frame unrelated tabs.
+  await chrome.storage.local.remove("activeManipulatedTabIds");
   await restoreAgentContext();
   await startServer().catch(() => {});
 });
@@ -2290,13 +2294,25 @@ chrome.runtime.onSuspend.addListener(() => {
 });
 
 // ─── Agent frame: soft gradient rim on tabs the agent has touched ───
+async function isInAgentGroup(tab) {
+  if (tab.groupId == null || tab.groupId < 0) return false;
+  await resolveAgentGroup();
+  return aiGroupId !== null && tab.groupId === aiGroupId;
+}
+
+function forgetAgentFrame(tabId) {
+  if (activeManipulatedTabIds.delete(tabId)) persistAgentContext();
+}
+
 async function showAgentFrame(tabId) {
   if (!tabId) return;
-  const isNew = !activeManipulatedTabIds.has(tabId);
-  activeManipulatedTabIds.add(tabId);
-  if (isNew) persistAgentContext();
   try {
     const tab = await chrome.tabs.get(tabId);
+    if (!(await isInAgentGroup(tab))) return;
+    if (!activeManipulatedTabIds.has(tabId)) {
+      activeManipulatedTabIds.add(tabId);
+      persistAgentContext();
+    }
     if (!tab.url || !tab.url.startsWith("http")) return;
 
     await chrome.scripting.executeScript({
@@ -2310,6 +2326,9 @@ async function updateAgentFrame(tabId) {
   if (!tabId) return;
   try {
     const tab = await chrome.tabs.get(tabId);
+    if (activeManipulatedTabIds.has(tabId) && !(await isInAgentGroup(tab))) {
+      forgetAgentFrame(tabId);
+    }
     if (!tab.url || !tab.url.startsWith("http")) return;
 
     if (activeManipulatedTabIds.has(tabId)) {
@@ -2537,7 +2556,7 @@ async function clearAllAgentFrames() {
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.status === "complete") {
+  if (changeInfo.status === "complete" || changeInfo.groupId !== undefined) {
     updateAgentFrame(tabId);
   }
 });
