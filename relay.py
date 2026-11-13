@@ -23,6 +23,7 @@ import os
 import uuid
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
+from urllib.parse import urlparse, parse_qs
 
 # Force UTF-8 stdio. On Windows the default is the locale codepage
 # (cp1252/cp1258/...), which corrupts multibyte input like Vietnamese
@@ -101,6 +102,12 @@ class WebSocketFrame:
         return header + payload
 
     @staticmethod
+    def encode_close(code: int, reason: str = "") -> bytes:
+        reason_bytes = reason.encode("utf-8")[:120].decode("utf-8", errors="ignore").encode("utf-8")
+        payload = struct.pack(">H", code) + reason_bytes
+        return bytes([0x88, len(payload)]) + payload
+
+    @staticmethod
     def decode(data: bytes) -> str:
         if len(data) < 6:
             return ""
@@ -123,9 +130,11 @@ class WebSocketFrame:
 
 
 class ExtensionClient:
-    def __init__(self, conn, addr):
+    def __init__(self, conn, addr, instance_id: str = "", name: str = ""):
         self.conn = conn
         self.addr = addr
+        self.instance_id = instance_id
+        self.name = name or "Unnamed browser"
         self.alive = True
         self._buf = b""
         self._send_lock = threading.Lock()
@@ -202,12 +211,25 @@ class ExtensionClient:
             self.alive = False
             return ""
 
-    def close(self):
+    def close(self, code: int = None, reason: str = ""):
+        self.alive = False
+        if code is not None:
+            try:
+                with self._send_lock:
+                    self.conn.sendall(WebSocketFrame.encode_close(code, reason))
+                # Give the browser time to read the close frame so it sees our
+                # close code instead of an abnormal 1006 disconnect.
+                threading.Timer(1.0, self._close_socket).start()
+                return
+            except Exception:
+                pass
+        self._close_socket()
+
+    def _close_socket(self):
         try:
             self.conn.close()
         except Exception:
             pass
-        self.alive = False
 
 
 extension_client = None
@@ -217,6 +239,10 @@ pending_lock = threading.Lock()
 _internal_ids = itertools.count(1)
 SESSION_HEADER = "X-BrowserMCPX-Session"
 LOCAL_SESSION_ID = os.environ.get("BROWSER_MCP_X_SESSION") or uuid.uuid4().hex
+CLOSE_BUSY = 4001
+CLOSE_TAKEN_OVER = 4002
+last_browser_by_session = {}
+standby_logged = set()
 
 
 def handle_extension_connection(conn, addr):
@@ -238,6 +264,11 @@ def handle_extension_connection(conn, addr):
                 break
             raw += chunk
         handshake_data = raw.decode("utf-8", errors="replace")
+        request_line = handshake_data.split("\r\n", 1)[0].split(" ")
+        query = parse_qs(urlparse(request_line[1]).query) if len(request_line) > 1 else {}
+        instance_id = (query.get("id") or [""])[0]
+        browser_name = (query.get("name") or [""])[0][:60]
+        takeover = (query.get("takeover") or ["0"])[0] == "1"
         headers = {}
         for line in handshake_data.split("\r\n")[1:]:
             if ":" in line:
@@ -269,9 +300,25 @@ def handle_extension_connection(conn, addr):
         conn.close()
         return
 
-    client = ExtensionClient(conn, addr)
+    client = ExtensionClient(conn, addr, instance_id, browser_name)
+    replaced = None
     with extension_lock:
+        current = extension_client if extension_client and extension_client.alive else None
+        same_instance = current and instance_id and current.instance_id == instance_id
+        if current and not takeover and not same_instance:
+            if instance_id not in standby_logged:
+                standby_logged.add(instance_id)
+                print(f"[Browser MCP X] '{client.name}' on standby: '{current.name}' is active", file=sys.stderr)
+            client.close(CLOSE_BUSY, current.name)
+            return
+        standby_logged.discard(instance_id)
+        replaced = current
         extension_client = client
+        client.send(json.dumps({"jsonrpc": "2.0", "method": "notifications/relay_accepted"}))
+    if replaced:
+        replaced.close(CLOSE_TAKEN_OVER, client.name)
+        print(f"[Browser MCP X] '{client.name}' took over from '{replaced.name}'", file=sys.stderr)
+    print(f"[Browser MCP X] Active browser: '{client.name}'", file=sys.stderr)
 
     # Listen for responses from extension. If an HTTP /mcp request is waiting
     # for this JSON-RPC id, deliver it there; otherwise forward to stdout for
@@ -289,6 +336,8 @@ def handle_extension_connection(conn, addr):
                         pending.put(parsed)
                     else:
                         print(f"[Browser MCP X] Dropping late response {msg_id}", file=sys.stderr)
+                    continue
+                if "method" not in parsed:
                     continue
                 sys.stdout.write(json.dumps(parsed, ensure_ascii=False) + "\n")
                 sys.stdout.flush()
@@ -352,6 +401,22 @@ def wait_for_extension(timeout: float = 15.0) -> bool:
     return False
 
 
+def annotate_browser_switch(resp: dict, session_id: str, client: "ExtensionClient") -> dict:
+    previous = last_browser_by_session.get(session_id)
+    last_browser_by_session[session_id] = (client.instance_id, client.name)
+    result = resp.get("result")
+    if previous is None or previous[0] == client.instance_id or not isinstance(result, dict):
+        return resp
+    notice = {
+        "type": "text",
+        "text": f"[Browser MCP X] WARNING: active browser changed from '{previous[1]}' to '{client.name}'. "
+                f"Tab IDs and page state from the previous browser are no longer valid.",
+    }
+    resp = dict(resp)
+    resp["result"] = {**result, "content": [notice] + list(result.get("content") or [])}
+    return resp
+
+
 def call_extension_sync(msg: dict, timeout: float = 30.0, session_id: str = None) -> dict:
     """Forward an MCP request to the extension and wait for its JSON-RPC response.
 
@@ -387,7 +452,10 @@ def call_extension_sync(msg: dict, timeout: float = 30.0, session_id: str = None
                 "error": {"code": -32001, "message": "Failed to send request to Browser MCP X extension."}
             })
         try:
-            return reply(response_queue.get(timeout=timeout))
+            resp = response_queue.get(timeout=timeout)
+            if msg.get("method") == "tools/call":
+                resp = annotate_browser_switch(resp, session_id or LOCAL_SESSION_ID, client)
+            return reply(resp)
         except queue.Empty:
             return reply({
                 "jsonrpc": "2.0",
@@ -542,12 +610,13 @@ class StatusHandler(BaseHTTPRequestHandler):
         if not self._local_request_only():
             return self._forbid()
         with extension_lock:
-            connected = extension_client and extension_client.alive
+            client = extension_client if extension_client and extension_client.alive else None
 
         status = {
             "name": "browser-mcp-x",
             "version": VERSION,
-            "extension_connected": bool(connected),
+            "extension_connected": bool(client),
+            "active_browser": client.name if client else None,
             "ws_port": WS_PORT,
             "mcp_port": MCP_PORT,
             "tools": [t["name"] for t in (load_tools_file() or load_cached_tools() or [])],

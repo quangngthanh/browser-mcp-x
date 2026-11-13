@@ -64,6 +64,15 @@ hermes mcp add browser-mcp-x --command "python3 /path/to/relay.py"
 
 Click the Browser MCP X extension icon → **Start**
 
+### Multiple Chrome profiles / instances
+
+The relay drives one browser at a time. Give each browser a name in the popup (e.g. "Work", "Personal").
+
+- The first browser to connect is **Active**; others wait in **Standby** and never steal control on reconnect.
+- **Stop** is remembered: a stopped browser stays off across restarts until you click Start again.
+- **Use this browser** in the popup takes control explicitly; the previous browser stops and will not reconnect by itself.
+- `get_tabs` / `get_page_info` include the active browser's name, and the agent gets a warning on the next tool call whenever the active browser changes.
+
 ## 37 MCP Tools
 
 ### Core Tools

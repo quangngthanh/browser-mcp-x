@@ -219,6 +219,51 @@
     transform: translateY(0);
   }
 
+  .name-input {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: #ffffff;
+    background: rgba(9, 5, 16, 0.5);
+    border: 1px solid rgba(244, 114, 182, 0.2);
+    border-radius: 6px;
+    padding: 4px 8px;
+    width: 150px;
+    text-align: right;
+    outline: none;
+  }
+
+  .name-input:focus {
+    border-color: #f472b6;
+  }
+
+  .relay-note {
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: #fcd34d;
+    background: rgba(161, 98, 7, 0.15);
+    border: 1px solid rgba(252, 211, 77, 0.25);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+
+  .relay-note[hidden],
+  .btn[hidden] {
+    display: none;
+  }
+
+  .btn-secondary {
+    background: rgba(244, 114, 182, 0.1);
+    color: #f9a8d4;
+    border: 1.5px solid rgba(244, 114, 182, 0.4);
+    margin-top: 8px;
+  }
+
+  .btn-secondary:hover {
+    background: rgba(244, 114, 182, 0.2);
+    color: #ffffff;
+  }
+
   .btn-danger {
     background: rgba(239, 68, 68, 0.08);
     color: #f87171;
@@ -375,6 +420,10 @@
 
 <div class="status-card">
   <div class="status-item">
+    <span class="status-label">Browser name</span>
+    <input class="name-input" id="browserName" maxlength="60" spellcheck="false" placeholder="e.g. Work">
+  </div>
+  <div class="status-item">
     <span class="status-label">Server Status</span>
     <span class="status-value">
       <span class="status-dot dot-off" id="statusDot"></span>
@@ -385,7 +434,9 @@
     <span class="status-label">Relay WebSocket</span>
     <span class="status-value font-mono" id="wsStatus">—</span>
   </div>
+  <div class="relay-note" id="relayNote" hidden></div>
   <button class="btn btn-primary" id="startBtn">Start</button>
+  <button class="btn btn-secondary" id="takeoverBtn" hidden>Use this browser</button>
 </div>
 
 

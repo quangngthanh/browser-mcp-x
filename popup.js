@@ -4,83 +4,94 @@
 
 let isRunning = false;
 
-// Check initial status
-chrome.runtime.sendMessage({ type: "GET_STATUS" }, (status) => {
-  if (status) {
+function refreshStatus() {
+  chrome.runtime.sendMessage({ type: "GET_STATUS" }, (status) => {
+    if (!status) return;
     isRunning = status.running;
     updateUI(status);
-  }
-});
+    const nameInput = document.getElementById("browserName");
+    if (nameInput && document.activeElement !== nameInput) nameInput.value = status.browserName || "";
+  });
+}
 
-// Listen for status updates
+refreshStatus();
+
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === "CLIENT_CONNECTED") {
-    const dot = document.getElementById("statusDot");
-    if (dot) dot.className = "status-dot dot-on";
-  }
-  if (msg.type === "CLIENT_DISCONNECTED") {
-    const dot = document.getElementById("statusDot");
-    if (dot && isRunning) dot.className = "status-dot dot-waiting";
+  if (["CLIENT_CONNECTED", "CLIENT_DISCONNECTED", "RELAY_STANDBY", "RELAY_TAKEN_OVER"].includes(msg.type)) {
+    setTimeout(refreshStatus, 150);
   }
 });
 
 function toggleServer() {
-  if (isRunning) {
-    chrome.runtime.sendMessage({ type: "STOP_SERVER" }, () => {
-      isRunning = false;
-      updateUI();
-    });
-  } else {
-    chrome.runtime.sendMessage({ type: "START_SERVER" }, () => {
-      isRunning = true;
-      updateUI();
-    });
-  }
+  const type = isRunning ? "STOP_SERVER" : "START_SERVER";
+  chrome.runtime.sendMessage({ type }, () => refreshStatus());
 }
 
-function updateUI(status) {
+function takeOver() {
+  chrome.runtime.sendMessage({ type: "TAKE_OVER" }, () => setTimeout(refreshStatus, 500));
+}
+
+function saveBrowserName() {
+  const input = document.getElementById("browserName");
+  const browserName = input.value.trim();
+  if (!browserName) {
+    refreshStatus();
+    return;
+  }
+  chrome.runtime.sendMessage({ type: "SET_BROWSER_NAME", browserName }, () => {
+    if (isRunning) chrome.runtime.sendMessage({ type: "START_SERVER" }, () => refreshStatus());
+  });
+}
+
+function updateUI(status = {}) {
   const btn = document.getElementById("startBtn");
+  const takeoverBtn = document.getElementById("takeoverBtn");
   const dot = document.getElementById("statusDot");
   const text = document.getElementById("statusText");
   const ws = document.getElementById("wsStatus");
+  const note = document.getElementById("relayNote");
+  const state = status.relayState;
+  const other = status.activeBrowser ? `"${status.activeBrowser}"` : "another browser";
 
-  if (isRunning) {
-    if (btn) {
-      btn.textContent = "Stop";
-      btn.className = "btn btn-danger";
+  btn.textContent = isRunning ? "Stop" : "Start";
+  btn.className = isRunning ? "btn btn-danger" : "btn btn-primary";
+  ws.textContent = isRunning ? "ws://localhost:9274" : "—";
+  ws.style.color = isRunning ? "#f472b6" : "#a291b5";
+
+  note.hidden = true;
+  takeoverBtn.hidden = true;
+
+  if (!isRunning) {
+    dot.className = "status-dot dot-off";
+    text.textContent = "Stopped";
+    if (state === "taken_over") {
+      note.textContent = `Agent control moved to ${other}. This browser will not reconnect until you start it again.`;
+      note.hidden = false;
+      takeoverBtn.hidden = false;
     }
-    if (dot) {
-      dot.className = (status && status.clients > 0) ? "status-dot dot-on" : "status-dot dot-waiting";
-    }
-    if (text) {
-      text.textContent = "Running";
-    }
-    if (ws) {
-      ws.textContent = "ws://localhost:9274";
-      ws.style.color = "#f472b6"; // neon pink
-    }
-  } else {
-    if (btn) {
-      btn.textContent = "Start";
-      btn.className = "btn btn-primary";
-    }
-    if (dot) {
-      dot.className = "status-dot dot-off";
-    }
-    if (text) {
-      text.textContent = "Stopped";
-    }
-    if (ws) {
-      ws.textContent = "—";
-      ws.style.color = "#a291b5"; // lavender/slate-purple
-    }
+    return;
   }
+
+  if (state === "standby") {
+    dot.className = "status-dot dot-waiting";
+    text.textContent = "Standby";
+    note.textContent = `Agent is controlling ${other}. This browser takes over only when that one stops, or when you click below.`;
+    note.hidden = false;
+    takeoverBtn.hidden = false;
+    return;
+  }
+
+  const active = state === "active" || status.clients > 0;
+  dot.className = active ? "status-dot dot-on" : "status-dot dot-waiting";
+  text.textContent = active ? "Active" : "Connecting";
 }
 
-// ═══════════════════════════════════════════════════════════
-// Event Listeners (CSP-safe — no inline handlers)
-// ═══════════════════════════════════════════════════════════
 document.addEventListener("DOMContentLoaded", () => {
-  const startBtn = document.getElementById("startBtn");
-  if (startBtn) startBtn.addEventListener("click", toggleServer);
+  document.getElementById("startBtn").addEventListener("click", toggleServer);
+  document.getElementById("takeoverBtn").addEventListener("click", takeOver);
+  const nameInput = document.getElementById("browserName");
+  nameInput.addEventListener("change", saveBrowserName);
+  nameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") nameInput.blur();
+  });
 });

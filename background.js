@@ -580,6 +580,24 @@ async function captureWithDebugger(tabId, format = "jpeg", quality = 75) {
   }
 }
 
+// Scripts injected with allFrames run once per frame, and the top frame also
+// reaches into same-origin iframes, so acting directly would hit the same
+// element more than once. Probe every frame first, then act in exactly one.
+async function runInBestFrame(tabId, func, args, { world = "ISOLATED", rank = (r) => (r ? 0 : null) } = {}) {
+  const probes = await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, world, func, args: [true, ...args] });
+  let best = null;
+  for (const probe of probes) {
+    const score = rank(probe.result);
+    if (score == null) continue;
+    if (!best || score < best.score || (score === best.score && probe.frameId < best.frameId)) {
+      best = { frameId: probe.frameId, score };
+    }
+  }
+  if (!best) return { found: false };
+  const [res] = await chrome.scripting.executeScript({ target: { tabId, frameIds: [best.frameId] }, world, func, args: [false, ...args] });
+  return { found: true, result: res?.result };
+}
+
 // ─── Tool Execution ───
 async function executeTool(toolName, args, overrideTabId = null, sessionId = DEFAULT_SESSION_ID) {
   const explicitTabId = args.tabId ?? args.id ?? overrideTabId;
@@ -630,9 +648,7 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
     }
 
     case "click": {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id, allFrames: true },
-        func: (sel) => {
+      const { found, result } = await runInBestFrame(tab.id, (probe, sel) => {
           // Try main document first, then all frames.
           function findElement(root) {
             return root.querySelector(sel);
@@ -646,6 +662,7 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
               } catch (e) {}
             }
           }
+          if (probe) return Boolean(el);
           if (!el) return `Element not found: ${sel}`;
           el.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
           const rect = el.getBoundingClientRect();
@@ -655,20 +672,14 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
           el.dispatchEvent(new PointerEvent("pointerup", opts));
           el.dispatchEvent(new MouseEvent("mouseup", opts));
           el.dispatchEvent(new MouseEvent("click", opts));
-          if (typeof el.click === "function") el.click();
           return `Clicked: ${sel}`;
-        },
-        args: [args.selector]
-      });
+      }, [args.selector]);
       const clickSnap = await captureAriaSnapshot(tab.id);
-      return { content: [{ type: "text", text: results[0]?.result }, { type: "text", text: clickSnap }] };
+      return { content: [{ type: "text", text: found ? result : `Element not found: ${args.selector}` }, { type: "text", text: clickSnap }] };
     }
 
     case "type_text": {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id, allFrames: true },
-        world: "MAIN",
-        func: (sel, text) => {
+      const { found, result } = await runInBestFrame(tab.id, (probe, sel, text) => {
           function findElement(root) {
             return root.querySelector(sel);
           }
@@ -681,48 +692,46 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
               } catch (e) {}
             }
           }
+          if (probe) return Boolean(el);
           if (!el) return `Element not found: ${sel}`;
 
+          const doc = el.ownerDocument;
+          const win = doc.defaultView || window;
           el.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
           el.focus();
           const isCE = el.isContentEditable || el.getAttribute("contenteditable") === "true";
           if (isCE) {
-            const selection = window.getSelection();
-            const range = document.createRange();
+            const selection = win.getSelection();
+            const range = doc.createRange();
             range.selectNodeContents(el);
             selection.removeAllRanges();
             selection.addRange(range);
-            const inserted = document.execCommand("insertText", false, text);
-            if (!inserted) {
+            // execCommand fires its own beforeinput/input; a second synthetic
+            // input event makes editors like Lexical/Draft insert the text twice.
+            if (!doc.execCommand("insertText", false, text)) {
               el.textContent = text;
               el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
             }
-            el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
             return `Typed into contenteditable ${sel}`;
           }
 
-          const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+          const proto = el.tagName === "TEXTAREA" ? win.HTMLTextAreaElement.prototype : win.HTMLInputElement.prototype;
           const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
           if (setter) setter.call(el, text);
           else el.value = text;
-          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertReplacementText" }));
           el.dispatchEvent(new Event("change", { bubbles: true }));
-          el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
           return `Typed "${text}" into ${sel}`;
-        },
-        args: [args.selector, args.text]
-      });
+      }, [args.selector, args.text], { world: "MAIN" });
       const typeSnap = await captureAriaSnapshot(tab.id);
-      return { content: [{ type: "text", text: results[0]?.result }, { type: "text", text: typeSnap }] };
+      return { content: [{ type: "text", text: found ? result : `Element not found: ${args.selector}` }, { type: "text", text: typeSnap }] };
     }
 
     case "click_text": {
       const targetText = fixMojibake(args.text ?? args.targetText ?? "");
       const isPartial = args.partial !== false;
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: tab.id, allFrames: true },
-        func: (searchText, partial) => {
-          if (!searchText) return "Error: No search text provided";
+      const { found, result } = await runInBestFrame(tab.id, (probe, searchText, partial) => {
+          if (!searchText) return probe ? null : "Error: No search text provided";
 
           const CP1252_MAP = {
             0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85,
@@ -822,24 +831,33 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
             }
           }
 
-          // Search prioritized selectors first
-          for (const sel of selectors) {
-            const els = document.querySelectorAll(sel);
-            for (const el of els) {
-              evaluateElement(el);
+          const stashed = probe ? null : globalThis.__bmxClickTextMatch;
+          globalThis.__bmxClickTextMatch = null;
+          if (stashed?.isConnected) {
+            bestMatch = stashed;
+          } else {
+            for (const sel of selectors) {
+              const els = document.querySelectorAll(sel);
+              for (const el of els) {
+                evaluateElement(el);
+              }
+              if (bestMatch && bestTier <= 3 && bestScore <= searchNfc.length + 10) {
+                break;
+              }
             }
-            if (bestMatch && bestTier <= 3 && bestScore <= searchNfc.length + 10) {
-              break;
+
+            if (!bestMatch) {
+              const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, null, false);
+              let node;
+              while ((node = walker.nextNode())) {
+                evaluateElement(node);
+              }
             }
           }
 
-          // Fallback to TreeWalker if not found in selector list
-          if (!bestMatch) {
-            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, null, false);
-            let node;
-            while ((node = walker.nextNode())) {
-              evaluateElement(node);
-            }
+          if (probe) {
+            globalThis.__bmxClickTextMatch = bestMatch;
+            return bestMatch ? { tier: bestTier, score: bestScore } : null;
           }
 
           if (bestMatch) {
@@ -857,17 +875,13 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
             bestMatch.dispatchEvent(new PointerEvent("pointerup", opts));
             bestMatch.dispatchEvent(new MouseEvent("mouseup", opts));
             bestMatch.dispatchEvent(new MouseEvent("click", opts));
-            if (typeof bestMatch.click === "function") bestMatch.click();
             const matchedText = clean(bestMatch.textContent || bestMatch.value || bestMatch.getAttribute("aria-label") || "").substring(0, 60);
             return `Clicked text: "${matchedText}"`;
           }
 
           return `No element found with text: "${searchText}"`;
-        },
-        args: [targetText, isPartial]
-      });
-      const clickedResult = results.find(r => r?.result && r.result.startsWith("Clicked text:"))?.result || results[0]?.result || `No element found with text: "${targetText}"`;
-      return { content: [{ type: "text", text: clickedResult }] };
+      }, [targetText, isPartial], { rank: (r) => (r ? r.tier * 1e6 + r.score : null) });
+      return { content: [{ type: "text", text: found ? result : `No element found with text: "${targetText}"` }] };
     }
 
     case "extract_text": {
@@ -922,7 +936,8 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
         }
         return entry;
       });
-      const payload = { sessionId, currentTabId: own?.tabId ?? null, tabs: tabList };
+      const { browserName } = await getBrowserIdentity();
+      const payload = { browser: browserName, sessionId, currentTabId: own?.tabId ?? null, tabs: tabList };
       return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
     }
 
@@ -1025,41 +1040,59 @@ async function executeTool(toolName, args, overrideTabId = null, sessionId = DEF
           scroll: { x: window.scrollX, y: window.scrollY }
         })
       });
-      const info = { ...results[0]?.result, tabId: tab.id, sessionId };
+      const { browserName } = await getBrowserIdentity();
+      const info = { browser: browserName, ...results[0]?.result, tabId: tab.id, sessionId };
       return { content: [{ type: "text", text: JSON.stringify(info, null, 2) }] };
     }
 
     case "fill_form": {
-      const results = await chrome.scripting.executeScript({
+      const fields = args.fields || {};
+      // Each frame only searches its own document; allFrames already covers iframes.
+      const probes = await chrome.scripting.executeScript({
         target: { tabId: tab.id, allFrames: true },
-        func: (fields) => {
-          const results = [];
-          for (const [sel, val] of Object.entries(fields)) {
-            function findElement(root) {
-              return root.querySelector(sel);
-            }
-            let el = findElement(document);
-            if (!el) {
-              for (const frame of document.querySelectorAll("iframe, frame")) {
-                try {
-                  el = frame.contentDocument?.querySelector(sel);
-                  if (el) break;
-                } catch (e) {}
-              }
-            }
-            if (!el) { results.push(`${sel}: not found`); continue; }
-            el.focus();
-            el.value = val;
-            el.dispatchEvent(new Event("input", { bubbles: true }));
-            el.dispatchEvent(new Event("change", { bubbles: true }));
-            el.dispatchEvent(new InputEvent("input", { bubbles: true, data: val, inputType: "insertText" }));
-            results.push(`${sel}: filled`);
-          }
-          return results.join("\n");
-        },
-        args: [args.fields]
+        func: (selectors) => selectors.filter((sel) => {
+          try { return Boolean(document.querySelector(sel)); } catch (e) { return false; }
+        }),
+        args: [Object.keys(fields)]
       });
-      return { content: [{ type: "text", text: results[0]?.result }] };
+      const fieldsByFrame = new Map();
+      const assigned = new Set();
+      for (const probe of [...probes].sort((a, b) => a.frameId - b.frameId)) {
+        for (const sel of probe.result || []) {
+          if (assigned.has(sel)) continue;
+          assigned.add(sel);
+          if (!fieldsByFrame.has(probe.frameId)) fieldsByFrame.set(probe.frameId, {});
+          fieldsByFrame.get(probe.frameId)[sel] = fields[sel];
+        }
+      }
+      const status = {};
+      for (const [frameId, frameFields] of fieldsByFrame) {
+        const [res] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id, frameIds: [frameId] },
+          func: (frameFields) => {
+            const out = {};
+            for (const [sel, val] of Object.entries(frameFields)) {
+              const el = document.querySelector(sel);
+              if (!el) { out[sel] = "not found"; continue; }
+              el.focus();
+              const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype
+                : el.tagName === "SELECT" ? HTMLSelectElement.prototype
+                : HTMLInputElement.prototype;
+              const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+              if (setter) setter.call(el, val);
+              else el.value = val;
+              el.dispatchEvent(new InputEvent("input", { bubbles: true, data: val, inputType: "insertReplacementText" }));
+              el.dispatchEvent(new Event("change", { bubbles: true }));
+              out[sel] = "filled";
+            }
+            return out;
+          },
+          args: [frameFields]
+        });
+        Object.assign(status, res?.result || {});
+      }
+      const text = Object.keys(fields).map((sel) => `${sel}: ${status[sel] || "not found"}`).join("\n");
+      return { content: [{ type: "text", text }] };
     }
 
     case "wait": {
@@ -1627,11 +1660,10 @@ session.headers.update(headers)
             range.selectNodeContents(el);
             selection.removeAllRanges();
             selection.addRange(range);
-            const inserted = document.execCommand("insertText", false, text);
-            if (!inserted) {
+            if (!document.execCommand("insertText", false, text)) {
               el.textContent = text;
+              el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
             }
-            el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
             return `Typed into contenteditable #${id}`;
           }
 
@@ -1639,9 +1671,8 @@ session.headers.update(headers)
           const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
           if (setter) setter.call(el, text);
           else el.value = text;
-          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertReplacementText" }));
           el.dispatchEvent(new Event("change", { bubbles: true }));
-          el.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
           return `Typed "${text}" into element #${id}`;
         },
         args: [elementId, args.text, cached || null, INTERACTIVE_SELECTORS]
@@ -2162,7 +2193,7 @@ function waitForTabLoad(tabId) {
 // ─── WebSocket MCP Server (via offscreen document) ───
 async function ensureOffscreenDocument() {
   const hasDocument = await chrome.offscreen.hasDocument();
-  if (hasDocument) return;
+  if (hasDocument) return false;
 
   try {
     await chrome.offscreen.createDocument({
@@ -2172,31 +2203,77 @@ async function ensureOffscreenDocument() {
     });
   } catch (e) {
     // Offscreen creation races can throw if another start just created it.
-    if (e.message && e.message.includes("existing")) return;
+    if (e.message && e.message.includes("existing")) return false;
     throw e;
   }
+  return true;
 }
 
-async function startServer() {
-  try {
-    await ensureOffscreenDocument();
-    isRunning = true;
-    await chrome.storage.local.set({ mcpRunning: true, mcpPort: MCP_PORT });
+let identityInitPromise = null;
 
-    // Give the offscreen document a tiny moment to register its listener.
-    setTimeout(() => {
-      chrome.runtime.sendMessage({ type: "START_MCP_SERVER", port: MCP_PORT });
-    }, 100);
+async function getBrowserIdentity() {
+  identityInitPromise ??= (async () => {
+    const stored = await chrome.storage.local.get(["instanceId", "browserName"]);
+    let { instanceId, browserName } = stored;
+    if (!instanceId || !browserName) {
+      instanceId ||= crypto.randomUUID();
+      browserName ||= `Chrome-${instanceId.slice(0, 4).toUpperCase()}`;
+      await chrome.storage.local.set({ instanceId, browserName });
+    }
+  })().catch((e) => {
+    identityInitPromise = null;
+    throw e;
+  });
+  await identityInitPromise;
+  const { instanceId, browserName } = await chrome.storage.local.get(["instanceId", "browserName"]);
+  return { instanceId, browserName };
+}
+
+async function sendStartToOffscreen(takeover = false) {
+  const { instanceId, browserName } = await getBrowserIdentity();
+  chrome.runtime.sendMessage({ type: "START_MCP_SERVER", instanceId, browserName, takeover }).catch(() => {});
+}
+
+let lifecycleQueue = Promise.resolve();
+
+function runLifecycle(fn) {
+  const next = lifecycleQueue.then(fn, fn);
+  lifecycleQueue = next.catch(() => {});
+  return next;
+}
+
+function startServer(options) {
+  return runLifecycle(() => doStartServer(options));
+}
+
+function stopServer(options) {
+  return runLifecycle(() => doStopServer(options));
+}
+
+async function doStartServer({ takeover = false } = {}) {
+  try {
+    const created = await ensureOffscreenDocument();
+    isRunning = true;
+    const state = { mcpRunning: true, mcpPort: MCP_PORT, userEnabled: true };
+    if (created || takeover) Object.assign(state, { relayState: "connecting", activeBrowser: null });
+    await chrome.storage.local.set(state);
+    setTimeout(() => sendStartToOffscreen(takeover), 100);
   } catch (e) {
     console.error("[Browser MCP X] Failed to start:", e);
     chrome.runtime.sendMessage({ type: "START_ERROR", error: e.message || String(e) });
   }
 }
 
-async function stopServer() {
-  if (!isRunning) return;
+function autoStartIfEnabled() {
+  return runLifecycle(async () => {
+    const { userEnabled } = await chrome.storage.local.get("userEnabled");
+    if (userEnabled === false) return;
+    await doStartServer();
+  });
+}
 
-  chrome.runtime.sendMessage({ type: "STOP_MCP_SERVER" });
+async function doStopServer({ userEnabled = false, relayState = "stopped", activeBrowser = null } = {}) {
+  chrome.runtime.sendMessage({ type: "STOP_MCP_SERVER" }).catch(() => {});
 
   try {
     const clients = await chrome.offscreen.hasDocument();
@@ -2206,7 +2283,8 @@ async function stopServer() {
   isRunning = false;
   connectedAgent = null;
   wsClients.clear();
-  chrome.storage.local.set({ mcpRunning: false, mcpPort: null, agentConnected: false });
+  chrome.storage.local.set({ mcpRunning: false, mcpPort: null, agentConnected: false, userEnabled, relayState, activeBrowser });
+  chrome.action.setBadgeText({ text: "" });
   clearAllAgentFrames();
 }
 
@@ -2227,7 +2305,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     isRunning = true;
     connectedAgent = msg.clientId;
     wsClients.add(msg.clientId);
-    chrome.storage.local.set({ mcpRunning: true, agentConnected: true });
+    chrome.storage.local.set({ mcpRunning: true, agentConnected: true, relayState: "active", activeBrowser: null });
     chrome.action.setBadgeText({ text: "ON" });
     chrome.action.setBadgeBackgroundColor({ color: "#52B788" });
     restoreAgentContext();
@@ -2239,7 +2317,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     wsClients.delete(msg.clientId);
     if (wsClients.size === 0) {
       connectedAgent = null;
-      chrome.storage.local.set({ agentConnected: false });
+      chrome.storage.local.set({ agentConnected: false, relayState: "connecting" });
       chrome.action.setBadgeText({ text: isRunning ? "RDY" : "" });
     }
     persistAgentContext();
@@ -2247,13 +2325,60 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
   }
 
+  if (msg.type === "OFFSCREEN_READY") {
+    if (isRunning) sendStartToOffscreen();
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (msg.type === "RELAY_STANDBY") {
+    wsClients.clear();
+    connectedAgent = null;
+    chrome.storage.local.set({ agentConnected: false, relayState: "standby", activeBrowser: msg.activeBrowser || null });
+    chrome.action.setBadgeText({ text: "WAIT" });
+    chrome.action.setBadgeBackgroundColor({ color: "#A16207" });
+    clearAllAgentFrames();
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (msg.type === "RELAY_TAKEN_OVER") {
+    stopServer({ userEnabled: false, relayState: "taken_over", activeBrowser: msg.activeBrowser || null });
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  if (msg.type === "TAKE_OVER") {
+    startServer({ takeover: true }).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+
+  if (msg.type === "SET_BROWSER_NAME") {
+    const browserName = String(msg.browserName || "").trim().slice(0, 60);
+    if (!browserName) {
+      sendResponse({ ok: false });
+      return false;
+    }
+    chrome.storage.local.set({ browserName }).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+
   if (msg.type === "GET_STATUS") {
     Promise.all([
-      chrome.storage.local.get(["mcpRunning", "agentConnected"]),
-      chrome.offscreen.hasDocument().catch(() => false)
-    ]).then(([stored, hasOffscreen]) => {
+      chrome.storage.local.get(["mcpRunning", "agentConnected", "relayState", "activeBrowser"]),
+      chrome.offscreen.hasDocument().catch(() => false),
+      getBrowserIdentity()
+    ]).then(([stored, hasOffscreen, identity]) => {
       const running = Boolean(isRunning || stored.mcpRunning || stored.agentConnected || hasOffscreen);
-      sendResponse({ running, port: MCP_PORT, clients: wsClients.size || (stored.agentConnected ? 1 : 0), hasOffscreen });
+      sendResponse({
+        running,
+        port: MCP_PORT,
+        clients: wsClients.size || (stored.agentConnected ? 1 : 0),
+        hasOffscreen,
+        relayState: running ? stored.relayState || "connecting" : stored.relayState || "stopped",
+        activeBrowser: stored.activeBrowser || null,
+        browserName: identity.browserName
+      });
     });
     return true;
   }
@@ -2273,7 +2398,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // ─── Extension install ───
 chrome.runtime.onInstalled.addListener(async (details) => {
   await restoreAgentContext();
-  await startServer().catch(() => {});
+  await autoStartIfEnabled().catch(() => {});
   console.log(`[Browser MCP X] Extension ${details.reason}. MCP server auto-started.`);
 });
 
@@ -2282,11 +2407,11 @@ chrome.runtime.onStartup.addListener(async () => {
   // Tab IDs are reassigned after a browser restart, so stale IDs would frame unrelated tabs.
   await chrome.storage.local.remove("activeManipulatedTabIds");
   await restoreAgentContext();
-  await startServer().catch(() => {});
+  await autoStartIfEnabled().catch(() => {});
 });
 
 // Auto-start on worker load
-startServer().catch(() => {});
+autoStartIfEnabled().catch(() => {});
 
 chrome.runtime.onSuspend.addListener(() => {
   // Do not stop the offscreen document here. It owns the persistent WebSocket.
